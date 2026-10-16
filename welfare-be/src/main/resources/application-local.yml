@@ -1,6 +1,0 @@
-# 내 컴퓨터 개발용 설정 (profile: local)
-spring:
-  flyway:
-    # 운영용 테이블(db/migration) + 개발용 가상 데이터(db/dev)를 함께 넣는다
-    # 운영 서버에서는 local 프로필을 쓰지 않으므로 가상 데이터가 들어가지 않는다
-    locations: classpath:db/migration,classpath:db/dev
