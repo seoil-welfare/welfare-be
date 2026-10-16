@@ -6,7 +6,7 @@
 # 원광복지관 일지 관리 앱 — 백엔드
 
 프론트엔드 프로토타입([welfare-fe](https://github.com/seoil-welfare/welfare-fe))이 mock 모드로 흉내 내고 있는 서버를 **실제로 만드는 저장소**입니다.
-지금은 **설계 단계**로, 기능명세서와 DB 설계까지 정리되어 있고 서버 코드는 아직 없습니다.
+지금은 **뼈대 단계**입니다. 서버가 켜지고 DB 테이블이 자동으로 만들어지는 것까지 되어 있고, 기능 API는 각자 브랜치에서 개발합니다.
 
 > **개발과 시범 운영은 가상 데이터로만 진행합니다.**
 > 복지관 답변지 등에 있는 실제 이용자 이름·생년월일은 개발 DB, 테스트 데이터, 커밋, 문서 어디에도 넣지 않습니다.
@@ -15,7 +15,129 @@
 
 ---
 
-## 1. 문서
+## 1. 실행 방법 (내 컴퓨터, Windows)
+
+### 사전 준비
+
+| 프로그램 | 버전 | 비고 |
+|---|---|---|
+| JDK | 21 | IntelliJ에서 프로젝트를 열 때 받아도 됩니다 |
+| PostgreSQL | 18 | [postgresql.org/download/windows](https://www.postgresql.org/download/windows/) 설치 프로그램. 설치 중 정하는 `postgres` 비밀번호를 기억해 두세요. 포트는 기본값 `5432` |
+| IntelliJ IDEA | Community 이상 | VS Code도 가능 |
+
+### DB 만들기 (처음 한 번만)
+
+시작 메뉴에서 **SQL Shell (psql)** 을 열고, 물어보는 항목은 엔터로 넘긴 뒤 `postgres` 비밀번호를 입력합니다.
+
+```sql
+CREATE USER welfare WITH PASSWORD '내가_정한_비밀번호';
+CREATE DATABASE welfare OWNER welfare;
+```
+
+테이블은 만들 필요 없습니다. 서버를 처음 켤 때 Flyway가 `src/main/resources/db/migration`의 SQL로 자동으로 만듭니다.
+
+### 비밀번호 파일 만들기
+
+```powershell
+copy .env.example .env      # 복사한 뒤 .env를 열어 DB_PASSWORD에 위 비밀번호를 적기
+```
+
+`.env`는 `.gitignore`에 들어 있어서 GitHub에 올라가지 않습니다. **비밀번호를 코드나 application.yml에 직접 쓰지 마세요.**
+
+### 서버 실행
+
+IntelliJ에서 `welfare-be` 폴더를 열고(Gradle 불러오기가 끝날 때까지 기다림) `WelfareApplication`의 ▶ 버튼을 누릅니다. 또는:
+
+```powershell
+.\gradlew.bat bootRun       # 서버: http://localhost:8080
+```
+
+브라우저에서 <http://localhost:8080/api/health> 를 열어 아래처럼 나오면 성공입니다.
+
+```json
+{ "status": "ok", "db": "PostgreSQL 18...", "tables": 19, "behaviorItems": 31, "staff": 5 }
+```
+
+| 값 | 뜻 |
+|---|---|
+| `tables: 19` | 테이블 18개 + Flyway 기록표 1개 |
+| `behaviorItems: 31` | 도전적 행동 세부 항목 (타해 10 · 자해 11 · 파괴 9 · 기타 1) |
+| `staff: 5` | 개발용 가상 직원 (`demo.staff1` 등, 비밀번호 `demo1234`) |
+
+### 가상 데이터
+
+`local` 프로필(기본값)로 실행하면 `src/main/resources/db/dev`의 가상 직원 5명·이용자 4명이 함께 들어갑니다. 프론트 mock과 같은 이름입니다. 운영 서버는 이 폴더를 읽지 않습니다.
+
+### DB를 처음부터 다시 만들고 싶을 때
+
+SQL Shell (psql)에서 `postgres`로 접속해서:
+
+```sql
+DROP DATABASE welfare;
+CREATE DATABASE welfare OWNER welfare;
+```
+
+서버를 다시 켜면 테이블과 가상 데이터가 새로 들어갑니다.
+
+> 서버 로그에 `PostgreSQL 18 is newer than this version of Flyway` 경고가 보여도 정상입니다. 경고일 뿐 테이블은 만들어집니다.
+
+> 이미 실행된 `V1__init.sql`, `V2__dev_seed.sql`은 **고치지 마세요.** Flyway가 내용이 바뀐 걸 알아채고 서버를 멈춥니다.
+> 테이블을 바꿀 땐 `V3__설명.sql`처럼 새 파일을 추가합니다.
+
+### 프론트와 붙이기
+
+welfare-fe 폴더의 `.env.local`:
+
+```
+VITE_API_MODE=http
+VITE_API_PROXY_TARGET=http://localhost:8080
+```
+
+백엔드 서버와 프론트(`npm run dev`)를 둘 다 켜 둔 상태에서 <http://localhost:5173> 을 엽니다.
+
+### 폴더 구조
+
+```
+welfare-be/
+  build.gradle                Spring Boot 3.5 · Java 21 · 라이브러리 목록
+  .env.example                DB 접속 정보 견본 (.env로 복사해서 사용)
+  src/main/java/kr/seoil/welfare/
+    WelfareApplication.java   서버 시작점
+    common/HealthController   GET /api/health
+    (diary/, auth/, stats/ … 기능별 패키지를 여기에 추가)
+  src/main/resources/
+    application.yml           공통 설정 (DB 주소는 환경변수에서)
+    application-local.yml     내 컴퓨터용 설정 (가상 데이터 포함)
+    db/migration/V1__init.sql 테이블 18개 + 선택 항목 목록
+    db/dev/V2__dev_seed.sql   개발용 가상 직원·이용자
+  docs/                       기능명세서, ERD, 스키마
+```
+
+---
+
+## 2. 브랜치 규칙
+
+`main`은 **항상 실행되는 상태**로 둡니다. main에 직접 올리지 않고, 기능마다 브랜치를 만들어 작업한 뒤 PR로 합칩니다.
+
+| 브랜치 | 담당 | 내용 |
+|---|---|---|
+| `feature/diary` | 재웅 | 일지 작성·조회 (`/api/diaries`) |
+| `feature/stats` | 재웅 | 통계 |
+| `feature/login` | 지민 | 로그인·세션 (`/api/auth`) |
+| `feature/notification` | 지민 | 알림 |
+| `feature/report` | 희정 | 보고서·파일 출력 |
+| `feature/calendar`, `feature/record` | 창건 | 달력·기록 |
+
+1. 최신 main에서 브랜치를 만든다
+2. 내 브랜치에서 개발 → 로컬에서 서버 켜고 확인 → 커밋
+3. GitHub에 올리고 PR을 만든다 (설명에 무엇을 했는지, 어떻게 확인했는지)
+4. 팀원 1명이 확인하면 Merge
+
+**로그인 전까지의 약속:** 로그인(`feature/login`)이 합쳐지기 전에는, 다른 기능은 "가상 직원 1번(`demo.staff1`)이 로그인했다"고 가정하고 개발합니다. 로그인이 생기면 세션에 저장된 `staffId`를 쓰도록 그 부분만 바꿉니다.
+
+---
+
+## 3. 문서
 
 | 문서 | 내용 |
 |---|---|
@@ -27,7 +149,7 @@
 
 ---
 
-## 2. 기술 스택 (안)
+## 4. 기술 스택 (안)
 
 팀 확정 전 추천안입니다.
 
@@ -52,7 +174,7 @@ AWS 비용 주의: 예산 알림 설정, NAT 게이트웨이 만들지 않기, �
 
 ---
 
-## 3. 화면과 기능 현황
+## 5. 화면과 기능 현황
 
 프론트(welfare-fe main, 2026. 10. 12.) 기준입니다. **구현**은 프론트 mock에서 동작한다는 뜻이고, 백엔드가 같은 규칙을 지키면 그대로 연결됩니다.
 
@@ -83,7 +205,7 @@ AWS 비용 주의: 예산 알림 설정, NAT 게이트웨이 만들지 않기, �
 
 ---
 
-## 4. API
+## 6. API
 
 ### 공통 약속
 
@@ -142,7 +264,7 @@ AWS 비용 주의: 예산 알림 설정, NAT 게이트웨이 만들지 않기, �
 
 ---
 
-## 5. 서버가 지켜야 할 규칙
+## 7. 서버가 지켜야 할 규칙
 
 프론트 `src/api/mock/mockApi.ts`가 흉내 내고 있는 규칙을 실제 서버에서 그대로 지켜야 합니다.
 
@@ -165,7 +287,7 @@ AWS 비용 주의: 예산 알림 설정, NAT 게이트웨이 만들지 않기, �
 
 ---
 
-## 6. DB 구조
+## 8. DB 구조
 
 PostgreSQL 테이블 18개입니다. 실제 PostgreSQL에서 생성과 제약조건(하루 1건, 종료 > 시작, 종결 상태 등)을 시험해 통과했습니다.
 
@@ -186,7 +308,7 @@ PostgreSQL 테이블 18개입니다. 실제 PostgreSQL에서 생성과 제약조
 
 ---
 
-## 7. 아직 정해지지 않은 것
+## 9. 아직 정해지지 않은 것
 
 | 항목 | 현재 프론트 | 제안 · 확인할 곳 |
 |---|---|---|
@@ -204,9 +326,9 @@ PostgreSQL 테이블 18개입니다. 실제 PostgreSQL에서 생성과 제약조
 
 ---
 
-## 8. 다음 할 일
+## 10. 다음 할 일
 
-1. Spring Boot 프로젝트 생성, Flyway에 `V1__init.sql`(= `docs/schema_v0.3.sql`) 등록
+1. ~~Spring Boot 프로젝트 생성, Flyway에 `V1__init.sql` 등록~~ ✅ 뼈대 완료
 2. 로그인·세션 (`/auth/*`)
 3. 일지 저장·조회 (`/diaries`) — 하루 1건, 상태 전이, 이력 기록
 4. 이용자·직원 (`/service-users`, `/staff`)
