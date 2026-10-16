@@ -31,6 +31,7 @@ spring:
 
   jackson:
     time-zone: Asia/Seoul      # JSON으로 내보내는 시각을 한국 시간 기준으로
+    default-property-inclusion: non_null   # 값이 없는(null) 칸은 JSON에서 아예 빼기 (프론트의 선택 필드와 맞춤)
 
 server:
   port: 8080                   # 프론트 .env.local의 VITE_API_PROXY_TARGET=http://localhost:8080 과 맞춤

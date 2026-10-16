@@ -1,16 +1,16 @@
-   # 빌드 결과물
-   build/
-   .gradle/
-   out/
+# 빌드 결과물
+build/
+.gradle/
+out/
 
-   # IntelliJ / VS Code 설정
-   .idea/
-   *.iml
-   .vscode/
+# IntelliJ / VS Code 설정
+.idea/
+*.iml
+.vscode/
 
-   # DB 비밀번호가 들어 있는 파일 — 절대 올리지 않음
-   .env
+# DB 비밀번호가 들어 있는 파일 — 절대 올리지 않음
+.env
 
-   # 운영체제 잡파일
-   .DS_Store
-   Thumbs.db
+# 운영체제 잡파일
+.DS_Store
+Thumbs.db

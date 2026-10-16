@@ -66,7 +66,12 @@ IntelliJ에서 `welfare-be` 폴더를 열고(Gradle 불러오기가 끝날 때�
 
 ### 가상 데이터
 
-`local` 프로필(기본값)로 실행하면 `src/main/resources/db/dev`의 가상 직원 5명·이용자 4명이 함께 들어갑니다. 프론트 mock과 같은 이름입니다. 운영 서버는 이 폴더를 읽지 않습니다.
+`local` 프로필(기본값)로 실행하면 `src/main/resources/db/dev`의 가상 데이터가 함께 들어갑니다. 운영 서버는 이 폴더를 읽지 않습니다.
+
+| 파일 | 내용 |
+|---|---|
+| `V2__dev_seed.sql` | 가상 직원 5명(`demo.staff1` 등, 비밀번호 `demo1234`)·이용자 4명 — 프론트 mock과 같은 이름 |
+| `R__dev_sample_diaries.sql` | 2026-04-01 ~ 2026-10-15 평일 가상 일지 약 380장 (통계 화면 시연용). 이미 일지가 있는 날짜는 건너뜀 |
 
 ### DB를 처음부터 다시 만들고 싶을 때
 
@@ -133,7 +138,10 @@ welfare-be/
 3. GitHub에 올리고 PR을 만든다 (설명에 무엇을 했는지, 어떻게 확인했는지)
 4. 팀원 1명이 확인하면 Merge
 
-**로그인 전까지의 약속:** 로그인(`feature/login`)이 합쳐지기 전에는, 다른 기능은 "가상 직원 1번(`demo.staff1`)이 로그인했다"고 가정하고 개발합니다. 로그인이 생기면 세션에 저장된 `staffId`를 쓰도록 그 부분만 바꿉니다.
+**로그인 전까지의 약속:** 로그인(`feature/login`)이 합쳐지기 전에는 `dev/DevAuthController`(임시 로그인, `local` 프로필에서만 켜짐, 비밀번호 `demo1234`)로 프론트를 테스트합니다.
+- 모든 기능은 세션의 `staffId`(Long)로 로그인한 직원을 알아냅니다 → `auth/SessionStaff.KEY`
+- 진짜 로그인은 성공 시 `session.setAttribute(SessionStaff.KEY, staffId)`만 해 주면 나머지 기능이 그대로 동작합니다
+- 진짜 로그인이 main에 합쳐지면 **`DevAuthController.java`를 삭제**합니다 (같은 주소 `/api/auth/login`이 겹치면 서버가 켜지지 않음)
 
 ---
 
@@ -242,7 +250,11 @@ AWS 비용 주의: 예산 알림 설정, NAT 게이트웨이 만들지 않기, �
 | `GET` | `/staff` | 직원 목록 |
 | `POST` | `/staff` | 직원 계정 추가 |
 
-**제안 API**(프론트 수정 필요): `GET /categories`(선택 항목 코드 목록), `GET /stats/summary` · `/stats/behaviors` · `/stats/activities` · `/stats/categories/:category`(서버 통계 집계), `POST /staff/:id/deactivate` · `/activate`(직원 사용 중지). 요청·응답은 기능명세서 5장에 있습니다.
+| `GET` | `/stats/summary?userId=&unit=&year=&month=&quarter=&week=` | 통계 메인 화면 숫자 전부 (서버 집계, 아래 참고) |
+
+**통계 서버 집계** `GET /api/stats/summary`는 만들어 두었고, 프론트 계산(`statsService.ts`)과 같은 결과가 나오는 것을 가상 일지로 비교 검증했습니다(이용자 3명 × 기간 7개, 11개 항목 전부 일치). 지금 프론트 통계 화면은 `GET /diaries`로 일지를 받아 직접 계산하므로, 프론트 `useStatsDiaries`를 이 API로 바꾸는 건 별도 작업입니다.
+
+**제안 API**(프론트 수정 필요): `GET /categories`(선택 항목 코드 목록), `/stats/behaviors` · `/stats/activities` · `/stats/categories/:category`(서버 통계 집계), `POST /staff/:id/deactivate` · `/activate`(직원 사용 중지). 요청·응답은 기능명세서 5장에 있습니다.
 
 ### 에러 코드
 
@@ -330,7 +342,8 @@ PostgreSQL 테이블 18개입니다. 실제 PostgreSQL에서 생성과 제약조
 
 1. ~~Spring Boot 프로젝트 생성, Flyway에 `V1__init.sql` 등록~~ ✅ 뼈대 완료
 2. 로그인·세션 (`/auth/*`)
-3. 일지 저장·조회 (`/diaries`) — 하루 1건, 상태 전이, 이력 기록
-4. 이용자·직원 (`/service-users`, `/staff`)
-5. 프론트 `.env.local`에 `VITE_API_MODE=http`로 붙여서 확인
-6. AWS 배포 (EC2 + RDS + S3/CloudFront)
+3. ~~일지 저장·조회 (`/diaries`) — 하루 1건, 상태 전이, 이력 기록~~ ✅ `feature/diary`
+4. ~~통계 서버 집계 `/stats/summary`~~ ✅ `feature/diary` — `/stats/behaviors`, `/stats/activities`는 다음 단계
+5. 이용자·직원 (`/service-users`, `/staff`) — 지금은 목록 조회(GET)만 있음
+6. 프론트 `.env.local`에 `VITE_API_MODE=http`로 붙여서 확인
+7. AWS 배포 (EC2 + RDS + S3/CloudFront)
