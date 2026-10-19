@@ -51,10 +51,21 @@ public class CalendarService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public List<CalendarClientStatus> clientStatuses(String date) {
-        // TODO 날짜 형식 검사
-        // TODO findClientStatuses 결과에 canCreate 붙이기
-        throw new UnsupportedOperationException("TODO: 이용자별 일지 상태");
+        return calendarRepository.findClientStatuses(parseDate(date)).stream()
+                .map(r -> {
+                    boolean hasLog = r.logId() != null;
+                    return new CalendarClientStatus(
+                            String.valueOf(r.clientId()),
+                            r.clientName(),
+                            hasLog ? r.status() : "none",
+                            hasLog ? String.valueOf(r.logId()) : null,
+                            hasLog ? String.valueOf(r.authorId()) : null,
+                            r.behaviorCount(),
+                            !hasLog);                           // 하루 1건이라 일지가 없을 때만 새로 쓸 수 있음
+                })
+                .toList();
     }
 
     private static boolean blank(String s) {

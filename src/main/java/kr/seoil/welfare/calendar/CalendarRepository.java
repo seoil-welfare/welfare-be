@@ -17,26 +17,30 @@ public class CalendarRepository {
     public record DayRow(LocalDate date, int completed, int draft, boolean hasBehavior) {
     }
 
-    /** 그날 일지가 없으면 logId, status, authorId는 null */
-    public record ClientRow(long clientId, String clientName, Long logId, String status, Long authorId) {
+    /** 그날 일지가 없으면 logId, status, authorId는 null, behaviorCount는 0 */
+    public record ClientRow(long clientId, String clientName, Long logId, String status, Long authorId,
+                            int behaviorCount) {
     }
+
+    /**
+     * 일지 l의 도전적 행동 1건씩 나오는 FROM ~ WHERE. 건수 규칙은 StatsRepository와 같다
+     * (상위 '기타'는 내용이 있을 때만 1건). 작성 중 일지도 포함한다.
+     */
+    private static final String BEHAVIOR_OF_LOG = " FROM record_behavior rb"
+            + " JOIN activity_record ar ON ar.record_id = rb.record_id"
+            + " JOIN behavior_item bi ON bi.item_id = rb.item_id"
+            + " JOIN behavior_area ba ON ba.area_id = bi.area_id"
+            + " WHERE ar.log_id = l.log_id AND ar.has_behavior"
+            + " AND (ba.code <> 'other' OR btrim(coalesce(rb.etc_text, '')) <> '')";
+
+    private static final String HAS_BEHAVIOR = "EXISTS (SELECT 1" + BEHAVIOR_OF_LOG + ")";
+    private static final String BEHAVIOR_COUNT = "(SELECT count(*)" + BEHAVIOR_OF_LOG + ")";
 
     private final NamedParameterJdbcTemplate jdbc;
 
     public CalendarRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
-
-    /**
-     * 일지 l에 도전적 행동이 1건이라도 있는지. 건수 규칙은 StatsRepository와 같다
-     * (상위 '기타'는 내용이 있을 때만 1건). 작성 중 일지도 포함한다.
-     */
-    private static final String HAS_BEHAVIOR = "EXISTS (SELECT 1 FROM record_behavior rb"
-            + " JOIN activity_record ar ON ar.record_id = rb.record_id"
-            + " JOIN behavior_item bi ON bi.item_id = rb.item_id"
-            + " JOIN behavior_area ba ON ba.area_id = bi.area_id"
-            + " WHERE ar.log_id = l.log_id AND ar.has_behavior"
-            + " AND (ba.code <> 'other' OR btrim(coalesce(rb.etc_text, '')) <> ''))";
 
     /** 기간 안 날짜별 숫자. 일지가 있는 날만 나온다 */
     public List<DayRow> countByDate(LocalDate from, LocalDate to) {
@@ -60,16 +64,17 @@ public class CalendarRepository {
         return n == null ? 0 : n;
     }
 
-    /*
-     * 일지가 없는 이용자도 나와야 해서 LEFT JOIN
-     *
-     * SELECT c.client_id, c.name, l.log_id, l.status, l.created_by
-     * FROM client c
-     * LEFT JOIN daily_log l ON l.client_id = c.client_id AND l.log_date = :date
-     * WHERE c.status = 'active'
-     * ORDER BY c.client_id
-     */
+    /** 이용 중인 이용자 전원과 그날 일지. 일지가 없는 이용자도 나와야 해서 LEFT JOIN */
     public List<ClientRow> findClientStatuses(LocalDate date) {
-        throw new UnsupportedOperationException("TODO: 이용자별 일지 상태 SQL");
+        String sql = "SELECT c.client_id, c.name, l.log_id, l.status, l.created_by,"
+                + " " + BEHAVIOR_COUNT + " AS behavior_count"
+                + " FROM client c"
+                + " LEFT JOIN daily_log l ON l.client_id = c.client_id AND l.log_date = :date"
+                + " WHERE c.status = 'active'"
+                + " ORDER BY c.client_id";
+        return jdbc.query(sql, new MapSqlParameterSource("date", date),
+                (rs, i) -> new ClientRow(rs.getLong("client_id"), rs.getString("name"),
+                        rs.getObject("log_id", Long.class), rs.getString("status"),
+                        rs.getObject("created_by", Long.class), rs.getInt("behavior_count")));
     }
 }
