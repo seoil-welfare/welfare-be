@@ -3,6 +3,7 @@ package kr.seoil.welfare.calendar;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -26,26 +27,37 @@ public class CalendarRepository {
         this.jdbc = jdbc;
     }
 
-    /*
-     * SELECT l.log_date,
-     *        count(*) FILTER (WHERE l.status = 'completed') AS completed,
-     *        count(*) FILTER (WHERE l.status = 'draft')     AS draft,
-     *        bool_or(EXISTS (SELECT 1 FROM activity_record ar
-     *                        WHERE ar.log_id = l.log_id AND ar.has_behavior)) AS has_behavior
-     * FROM daily_log l JOIN client c ON c.client_id = l.client_id
-     * WHERE l.log_date BETWEEN :from AND :to AND c.status = 'active'
-     * GROUP BY l.log_date ORDER BY l.log_date
-     *
-     * 프론트는 작성 중 일지의 도전적 행동도 표시하므로 status로 거르지 않음
-     * TODO has_behavior만 볼지, 프론트처럼 세부 항목 건수로 볼지 확인
+    /**
+     * 일지 l에 도전적 행동이 1건이라도 있는지. 건수 규칙은 StatsRepository와 같다
+     * (상위 '기타'는 내용이 있을 때만 1건). 작성 중 일지도 포함한다.
      */
+    private static final String HAS_BEHAVIOR = "EXISTS (SELECT 1 FROM record_behavior rb"
+            + " JOIN activity_record ar ON ar.record_id = rb.record_id"
+            + " JOIN behavior_item bi ON bi.item_id = rb.item_id"
+            + " JOIN behavior_area ba ON ba.area_id = bi.area_id"
+            + " WHERE ar.log_id = l.log_id AND ar.has_behavior"
+            + " AND (ba.code <> 'other' OR btrim(coalesce(rb.etc_text, '')) <> ''))";
+
+    /** 기간 안 날짜별 숫자. 일지가 있는 날만 나온다 */
     public List<DayRow> countByDate(LocalDate from, LocalDate to) {
-        throw new UnsupportedOperationException("TODO: 날짜별 일지 수 SQL");
+        String sql = "SELECT l.log_date,"
+                + " count(*) FILTER (WHERE l.status = 'completed') AS completed,"
+                + " count(*) FILTER (WHERE l.status = 'draft') AS draft,"
+                + " bool_or(" + HAS_BEHAVIOR + ") AS has_behavior"
+                + " FROM daily_log l"
+                + " JOIN client c ON c.client_id = l.client_id"
+                + " WHERE l.log_date BETWEEN :from AND :to AND c.status = 'active'"
+                + " GROUP BY l.log_date"
+                + " ORDER BY l.log_date";
+        return jdbc.query(sql, new MapSqlParameterSource().addValue("from", from).addValue("to", to),
+                (rs, i) -> new DayRow(rs.getObject("log_date", LocalDate.class), rs.getInt("completed"),
+                        rs.getInt("draft"), rs.getBoolean("has_behavior")));
     }
 
-    // SELECT count(*) FROM client WHERE status = 'active'
     public int activeClientCount() {
-        throw new UnsupportedOperationException("TODO: 이용 중 이용자 수 SQL");
+        Integer n = jdbc.queryForObject("SELECT count(*) FROM client WHERE status = 'active'",
+                new MapSqlParameterSource(), Integer.class);
+        return n == null ? 0 : n;
     }
 
     /*

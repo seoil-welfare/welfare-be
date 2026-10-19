@@ -1,8 +1,14 @@
 package kr.seoil.welfare.calendar;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
+import kr.seoil.welfare.calendar.CalendarRepository.DayRow;
+import kr.seoil.welfare.common.ApiException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 달력 규칙. 프론트 diaryService.ts의 dayCompletion과 같게 맞춘다.
@@ -24,15 +30,42 @@ public class CalendarService {
         this.calendarRepository = calendarRepository;
     }
 
+    @Transactional(readOnly = true)
     public List<CalendarDayCount> dayCounts(String from, String to) {
-        // TODO 날짜 형식 검사, from > to 또는 MAX_DAYS 초과면 400
-        // TODO countByDate + activeClientCount로 응답 만들기
-        throw new UnsupportedOperationException("TODO: 날짜별 일지 수");
+        if (blank(from) || blank(to)) {
+            throw ApiException.badRequest("from과 to 날짜가 필요해요.");
+        }
+        LocalDate start = parseDate(from);
+        LocalDate end = parseDate(to);
+        if (start.isAfter(end)) {
+            throw ApiException.badRequest("from이 to보다 늦을 수 없어요.");
+        }
+        if (ChronoUnit.DAYS.between(start, end) + 1 > MAX_DAYS) {
+            throw ApiException.badRequest("한 번에 " + MAX_DAYS + "일까지만 조회할 수 있어요.");
+        }
+
+        int target = calendarRepository.activeClientCount();
+        List<DayRow> rows = calendarRepository.countByDate(start, end);
+        return rows.stream()
+                .map(r -> new CalendarDayCount(r.date().toString(), r.completed(), r.draft(), target, r.hasBehavior()))
+                .toList();
     }
 
     public List<CalendarClientStatus> clientStatuses(String date) {
         // TODO 날짜 형식 검사
         // TODO findClientStatuses 결과에 canCreate 붙이기
         throw new UnsupportedOperationException("TODO: 이용자별 일지 상태");
+    }
+
+    private static boolean blank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    private static LocalDate parseDate(String s) {
+        try {
+            return LocalDate.parse(s.trim());                   // YYYY-MM-DD
+        } catch (DateTimeParseException e) {
+            throw ApiException.badRequest("날짜는 YYYY-MM-DD 형식이어야 해요.");
+        }
     }
 }
