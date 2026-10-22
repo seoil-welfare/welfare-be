@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: welfare-be
+
+  # 프로젝트 폴더의 .env 파일을 읽어서 DB_URL 같은 값을 가져온다 (없으면 그냥 넘어감)
+  config:
+    import: optional:file:.env[.properties]
+
+  # 따로 지정하지 않으면 local(내 컴퓨터 개발용) 설정으로 실행
+  profiles:
+    default: local
+
+  # DB 접속 정보 — 값은 .env 또는 환경변수에서 온다. 비밀번호를 여기 직접 쓰지 않는다
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/welfare}
+    username: ${DB_USERNAME:welfare}
+    password: ${DB_PASSWORD}
+
+  jpa:
+    open-in-view: false        # 화면 응답 중에 DB를 몰래 계속 부르지 않게 끔
+    hibernate:
+      ddl-auto: none           # 테이블은 Flyway(SQL 파일)가 만든다. JPA가 마음대로 바꾸지 않게
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: Asia/Seoul
+
+  # db/migration 폴더의 V1__, V2__ ... SQL을 순서대로 한 번씩만 실행
+  flyway:
+    locations: classpath:db/migration
+
+  jackson:
+    time-zone: Asia/Seoul      # JSON으로 내보내는 시각을 한국 시간 기준으로
+    default-property-inclusion: non_null   # 값이 없는(null) 칸은 JSON에서 아예 빼기 (프론트의 선택 필드와 맞춤)
+
+server:
+  port: 8080                   # 프론트 .env.local의 VITE_API_PROXY_TARGET=http://localhost:8080 과 맞춤

@@ -1,0 +1,35 @@
+plugins {
+    id 'java'                                                   // 자바 프로젝트
+    id 'org.springframework.boot' version '3.5.6'               // Spring Boot (실행 가능한 jar 만들기)
+    id 'io.spring.dependency-management' version '1.1.7'        // 라이브러리 버전을 Boot에 맞춰 자동 관리
+}
+
+group = 'kr.seoil'
+version = '0.0.1'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)            // JDK 21 사용 (없으면 IntelliJ가 받아 줌)
+    }
+}
+
+repositories {
+    mavenCentral()                                              // 라이브러리를 받아 오는 곳
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'        // REST API (@RestController)
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'   // DB 테이블 ↔ 자바 클래스 연결
+    implementation 'org.springframework.boot:spring-boot-starter-validation' // 요청 값 검사 (@NotNull 등)
+    implementation 'org.springframework.security:spring-security-crypto'     // BCrypt 비밀번호 해시 (로그인용). 해시 계산 라이브러리만 쓰고 Spring Security 필터는 켜지 않는다
+    implementation 'org.flywaydb:flyway-core'                                // SQL 파일로 테이블 자동 생성·변경
+    implementation 'org.flywaydb:flyway-database-postgresql'                 // Flyway의 PostgreSQL 지원
+    runtimeOnly 'org.postgresql:postgresql'                                  // PostgreSQL 접속 드라이버
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
