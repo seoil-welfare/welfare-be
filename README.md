@@ -138,10 +138,25 @@ welfare-be/
 3. GitHub에 올리고 PR을 만든다 (설명에 무엇을 했는지, 어떻게 확인했는지)
 4. 팀원 1명이 확인하면 Merge
 
-**로그인 전까지의 약속:** 로그인(`feature/login`)이 합쳐지기 전에는 `dev/DevAuthController`(임시 로그인, `local` 프로필에서만 켜짐, 비밀번호 `demo1234`)로 프론트를 테스트합니다.
-- 모든 기능은 세션의 `staffId`(Long)로 로그인한 직원을 알아냅니다 → `auth/SessionStaff.KEY`
-- 진짜 로그인은 성공 시 `session.setAttribute(SessionStaff.KEY, staffId)`만 해 주면 나머지 기능이 그대로 동작합니다
-- 진짜 로그인이 main에 합쳐지면 **`DevAuthController.java`를 삭제**합니다 (같은 주소 `/api/auth/login`이 겹치면 서버가 켜지지 않음)
+**로그인 (`feature/login`, 지민):** 진짜 로그인이 들어왔습니다. 임시 로그인 `dev/DevAuthController`는 삭제했습니다.
+- 모든 기능은 세션의 `staffId`(Long)로 로그인한 직원을 알아냅니다 -> `auth/SessionStaff.KEY`
+- 비밀번호는 BCrypt 해시로만 저장합니다 (`staff.password_hash`). 원문은 어디에도 남기지 않습니다
+- 가상 데이터(`db/dev/V2__dev_seed.sql`)의 데모 계정 5개는 그대로 쓸 수 있습니다. 비밀번호는 전부 `demo1234`
+  (`demo.staff1~3`, `demo.lead`, `demo.director` — 해시가 실제 BCrypt라서 진짜 로그인으로도 들어갑니다)
+- 회원가입은 항상 `role = staff`, `position = 사회복지사`로 만들어집니다. 로그인 전 화면이라 권한을 직접 고르게 두면
+  누구나 팀장·국장으로 가입할 수 있기 때문입니다. 팀장·국장은 담당자 관리(SF-02)가 생길 때까지 DB에서 올립니다:
+  `UPDATE staff SET role = 'teamLead', position = '팀장' WHERE login_id = '...';`
+
+| 메서드 · 경로 | 요청 | 응답 |
+|---|---|---|
+| `POST /api/auth/signup` | `{ loginId, password, name, department? }` | 201 Staff / 400 / 409 `DUPLICATE_LOGIN_ID` |
+| `POST /api/auth/login` | `{ loginId, password, autoLogin? }` | 200 Staff / 400 / 401 `INVALID_CREDENTIALS` / 403 `ACCOUNT_DISABLED` |
+| `GET /api/auth/me` | - | 200 Staff / 401 `UNAUTHENTICATED` / 403 `ACCOUNT_DISABLED` |
+| `POST /api/auth/logout` | - | 204 (로그인 상태가 아니어도 204) |
+| `PUT /api/auth/password` | `{ currentPassword, newPassword }` | 204 / 400 `CURRENT_PASSWORD_MISMATCH`·`PASSWORD_POLICY` / 401 |
+
+비밀번호 규칙은 `auth/PasswordPolicy`에 모여 있습니다 (8자 이상, 영문+숫자, 공백 금지). 복지관 확인 전 임시 기준입니다.
+자동 로그인은 세션 유지 시간만 늘립니다 (1시간 -> 30일). 브라우저를 완전히 닫으면 쿠키가 사라지는 문제는 B-9에서 함께 정합니다.
 
 ---
 
