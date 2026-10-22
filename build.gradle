@@ -33,3 +33,14 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// 커밋 메시지 검사 hook 켜기 (docs/commit-convention.md)
+// 컴파일 전에 git hook 경로를 .githooks로 맞춘다. 저장소 밖(.git이 없는 곳)에서 빌드하면 건너뛴다
+tasks.register('installGitHooks', Exec) {
+    description = '커밋 메시지 검사 hook(.githooks)을 켠다'
+    onlyIf { file('.git').exists() }
+    commandLine 'git', 'config', 'core.hooksPath', '.githooks'
+}
+tasks.named('compileJava') {
+    dependsOn 'installGitHooks'
+}

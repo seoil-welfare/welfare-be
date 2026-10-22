@@ -1,0 +1,60 @@
+#!/bin/sh
+# 커밋 메시지 형식 검사 (docs/commit-convention.md)
+# 형식이 틀리면 1로 끝나 커밋이 취소된다. git에 들어 있는 sh만으로 동작한다.
+# 빌드(./gradlew build 등) 때 installGitHooks 작업이 이 폴더를 git hook 경로로 설정한다.
+
+TYPES="feat fix style refactor docs chore test"
+MAX=50
+
+# git이 넣는 주석(#)과 빈 줄을 빼고 첫 줄만 본다
+subject=$(grep -v '^#' "$1" | sed 's/\r$//' | sed '/^[[:space:]]*$/d' | head -n 1 \
+  | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+
+# git이 자동으로 만드는 메시지는 그대로 통과시킨다
+case "$subject" in
+  "Merge "* | "Revert "* | "fixup! "* | "squash! "*) exit 0 ;;
+esac
+
+problems=""
+add_problem() {
+  problems="$problems
+  - $1"
+}
+
+if printf '%s\n' "$subject" | grep -Eq '^[a-z]+(\([a-z0-9-]+\))?: .+$'; then
+  type=$(printf '%s' "$subject" | sed -E 's/^([a-z]+).*/\1/')
+  desc=$(printf '%s' "$subject" | sed -E 's/^[a-z]+(\([a-z0-9-]+\))?: //')
+
+  case " $TYPES " in
+    *" $type "*) ;;
+    *) add_problem "'$type'은(는) 쓸 수 없는 타입이에요." ;;
+  esac
+
+  # UTF-8 글자 수: 이어지는 바이트(0x80~0xBF)를 빼고 세면 한글도 1자로 센다 (OS·로케일과 무관)
+  len=$(printf '%s' "$desc" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')
+  if [ "$len" -gt "$MAX" ]; then
+    add_problem "설명이 ${len}자예요. ${MAX}자 이내로 줄여 주세요."
+  fi
+
+  case "$desc" in
+    *.) add_problem "설명 끝에 마침표를 붙이지 않아요." ;;
+  esac
+else
+  add_problem "형식이 '<타입>: <설명>'이 아니에요. 콜론 뒤에 한 칸 띄어 주세요."
+fi
+
+[ -z "$problems" ] && exit 0
+
+cat >&2 <<EOF
+
+커밋이 취소됐어요. 커밋 메시지 형식을 확인해 주세요.
+
+  입력: ${subject:-(비어 있음)}$problems
+
+  형식: <타입>: <무엇을 했는지>
+  타입: feat, fix, style, refactor, docs, chore, test
+  예시: feat: 달력 날짜별 일지 수 API 구현
+  규칙: docs/commit-convention.md
+
+EOF
+exit 1
