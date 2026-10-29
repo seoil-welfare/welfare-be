@@ -36,6 +36,7 @@ public class DiaryController {
         this.diaryService = diaryService;
     }
 
+    // GET 요청이 들어오면 실행되는 list 메서드 (일지 목록)
     @GetMapping
     public List<DiaryResponse> list(
             @SessionAttribute(name = SessionStaff.KEY, required = false) Long staffId,   // 로그인한 직원 번호
@@ -47,24 +48,28 @@ public class DiaryController {
         return diaryService.list(userId, from, to, status);
     }
 
+    // 번호가 붙은 GET 요청이 들어오면 실행되는 get 메서드 (일지 1건)
     @GetMapping("/{id}")
     public DiaryResponse get(@SessionAttribute(name = SessionStaff.KEY, required = false) Long staffId,
-                             @PathVariable String id) {
+                             @PathVariable String id) {          // 주소의 {id} 자리 = 일지 번호
         SessionStaff.require(staffId);
         return diaryService.get(id);
     }
 
+    // POST 요청이 오면 실행: create 새로 저장
+    // 요청 본문 JSON을 통째로 받아 SaveDiaryRequest 객체로 바꾼다
     @PostMapping
     public ResponseEntity<DiaryResponse> create(@SessionAttribute(name = SessionStaff.KEY, required = false) Long staffId,
                                                 @RequestBody SaveDiaryRequest body) {
-        long actor = SessionStaff.require(staffId);              // 작성자 = 로그인한 직원
-        return ResponseEntity.status(HttpStatus.CREATED).body(diaryService.create(body, actor));   // 201
+        long actor = SessionStaff.require(staffId);              // 로그인 확인 + 직원 번호를 actor에 담아 둔다
+        return ResponseEntity.status(HttpStatus.CREATED).body(diaryService.create(body, actor));   // 응답 상태를 201로 직접 정함
     }
 
+    // PUT 요청이 오면 실행: update 고쳐서 저장
     @PutMapping("/{id}")
     public DiaryResponse update(@SessionAttribute(name = SessionStaff.KEY, required = false) Long staffId,
-                                @PathVariable String id,
-                                @RequestBody SaveDiaryRequest body) {
+                                @PathVariable String id,         // 고칠 일지 번호
+                                @RequestBody SaveDiaryRequest body) {   // 고친 내용 전체
         long actor = SessionStaff.require(staffId);
         return diaryService.update(id, body, actor);
     }
