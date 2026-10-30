@@ -1,12 +1,16 @@
 package kr.seoil.welfare.auth;
 
+import java.security.SecureRandom;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import kr.seoil.welfare.auth.dto.ChangePasswordRequest;
 import kr.seoil.welfare.auth.dto.LoginRequest;
 import kr.seoil.welfare.auth.dto.SignupRequest;
 import kr.seoil.welfare.common.ApiException;
+import kr.seoil.welfare.staff.CreateStaffRequest;
+import kr.seoil.welfare.staff.CreatedStaffResponse;
 import kr.seoil.welfare.staff.StaffDto;
 import kr.seoil.welfare.staff.StaffQueries;
 import org.springframework.dao.DuplicateKeyException;
@@ -28,6 +32,15 @@ public class AuthService {
     private static final Pattern LOGIN_ID = Pattern.compile("[a-z0-9._-]{4,50}");
 
     private static final String DEFAULT_DEPARTMENT = "주간활동지원팀";   // 명세서 SF-02 기본값
+
+    private static final Set<String> ROLES = Set.of("staff", "teamLead", "director");
+    /** 계정 추가를 할 수 있는 역할 (지금 프론트가 팀장·국장에게만 메뉴를 보여 주는 것과 같게) */
+    private static final Set<String> STAFF_MANAGERS = Set.of("teamLead", "director");
+
+    /** 임시 비밀번호 글자: 헷갈리는 글자(0 O 1 l I)는 뺐다 */
+    private static final String TEMP_PASSWORD_CHARS = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    private static final int TEMP_PASSWORD_LENGTH = 12;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     /**
      * 아이디가 없을 때도 비밀번호 비교를 한 번 해 주기 위한 가짜 해시.
@@ -67,9 +80,54 @@ public class AuthService {
         if (body == null) {
             throw ApiException.badRequest("가입 정보를 입력해 주세요.");
         }
-        String loginId = trimToEmpty(body.loginId()).toLowerCase();   // 대소문자로 아이디가 갈리지 않게
-        String name = trimToEmpty(body.name());
-        String department = trimToEmpty(body.department());
+        NewAccount account = checkNewAccount(body.loginId(), body.name(), body.department());
+        PasswordPolicy.check(body.password());
+        return insertAccount(account, body.password(), "staff");
+    }
+
+    // ------------------------------------------------------------------
+    // 계정 추가 (팀장·국장)
+    // ------------------------------------------------------------------
+
+    /**
+     * 팀장·국장이 직원 계정을 추가한다 (SF-02, POST /api/staff).
+     * 화면에 비밀번호 입력란이 없으므로 서버가 임시 비밀번호를 만들어 응답에 한 번만 담는다.
+     * 국장 계정은 국장만 만들 수 있다 (팀장이 자기보다 높은 권한을 만들지 못하게).
+     */
+    @Transactional
+    public CreatedStaffResponse createStaff(long actorId, CreateStaffRequest body) {
+        String actorRole = me(actorId).role();                         // 사용 중지된 계정이면 여기서 403
+        if (!STAFF_MANAGERS.contains(actorRole)) {
+            throw forbidden("계정 추가는 팀장·국장만 할 수 있어요.");
+        }
+        if (body == null) {
+            throw ApiException.badRequest("계정 정보를 입력해 주세요.");
+        }
+        String role = body.role() == null || body.role().isBlank() ? "staff" : body.role().trim();
+        if (!ROLES.contains(role)) {
+            throw ApiException.badRequest("역할은 staff, teamLead, director 중 하나여야 해요.");
+        }
+        if ("director".equals(role) && !"director".equals(actorRole)) {
+            throw forbidden("국장 계정은 국장만 추가할 수 있어요.");
+        }
+        NewAccount account = checkNewAccount(body.loginId(), body.name(), body.department());
+
+        String temporaryPassword = temporaryPassword();
+        long staffId = insertAccount(account, temporaryPassword, role);
+        StaffDto created = staffQueries.findById(staffId)
+                .orElseThrow(() -> new IllegalStateException("방금 만든 계정을 찾지 못했습니다: " + staffId));
+        return CreatedStaffResponse.of(created, temporaryPassword);
+    }
+
+    /** 검사를 통과한 새 계정 정보 */
+    private record NewAccount(String loginId, String name, String department) {
+    }
+
+    /** 회원가입·계정 추가 공통 입력 검사 */
+    private NewAccount checkNewAccount(String rawLoginId, String rawName, String rawDepartment) {
+        String loginId = trimToEmpty(rawLoginId).toLowerCase();         // 대소문자로 아이디가 갈리지 않게
+        String name = trimToEmpty(rawName);
+        String department = trimToEmpty(rawDepartment);
 
         if (loginId.isEmpty() || name.isEmpty()) {
             throw ApiException.badRequest("아이디와 이름을 입력해 주세요.");
@@ -85,23 +143,34 @@ public class AuthService {
         } else if (department.length() > 50) {
             throw ApiException.badRequest("소속 팀 이름이 너무 길어요.");
         }
-        PasswordPolicy.check(body.password());
-
         // 미리 한 번 확인해서 보통의 중복은 친절한 문구로 돌려준다
         if (authRepository.existsLoginId(loginId)) {
             throw duplicateLoginId();
         }
+        return new NewAccount(loginId, name, department);
+    }
 
-        String hash = passwordEncoder.encode(body.password());        // 원문은 저장하지 않는다
+    /** 비밀번호를 해시해서 계정 한 줄 추가 → 직원 번호 */
+    private long insertAccount(NewAccount account, String password, String role) {
+        String hash = passwordEncoder.encode(password);                // 원문은 저장하지 않는다
         try {
-            return authRepository.insert(loginId, hash, name, department,
-                    positionOf("staff"), "staff");
+            return authRepository.insert(account.loginId(), hash, account.name(), account.department(),
+                    positionOf(role), role);
         } catch (DuplicateKeyException e) {
             // 두 사람이 같은 아이디로 동시에 가입을 눌러 위 확인을 둘 다 통과한 경우.
             // DB의 UNIQUE 제약이 막아 주는데, 공통 처리기는 이 예외를 일지 중복으로 보기 때문에
             // 여기서 아이디 중복으로 바꿔 던진다.
             throw duplicateLoginId();
         }
+    }
+
+    /** 임시 비밀번호 12자 (비밀번호 규칙 8자 이상을 만족) */
+    private static String temporaryPassword() {
+        StringBuilder sb = new StringBuilder(TEMP_PASSWORD_LENGTH);
+        for (int i = 0; i < TEMP_PASSWORD_LENGTH; i++) {
+            sb.append(TEMP_PASSWORD_CHARS.charAt(RANDOM.nextInt(TEMP_PASSWORD_CHARS.length())));
+        }
+        return sb.toString();
     }
 
     // ------------------------------------------------------------------
@@ -209,6 +278,10 @@ public class AuthService {
     private static ApiException accountDisabled() {
         return new ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_DISABLED",
                 "사용이 중지된 계정이에요. 관리자에게 문의해 주세요.");
+    }
+
+    private static ApiException forbidden(String message) {
+        return new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", message);
     }
 
     private static ApiException duplicateLoginId() {
