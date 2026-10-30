@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import kr.seoil.welfare.common.ApiException;
@@ -31,6 +32,7 @@ import kr.seoil.welfare.diary.dto.SaveDiaryRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 /**
  * 일지 업무 규칙 (기능명세서 4.3~4.5, 8.2)
@@ -40,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
  *  3. 작성자는 서버가 정한다 — 처음 저장한 직원, 수정해도 그대로
  *  4. 저장할 때 활동은 통째로 교체 (지우고 다시 넣기)
  *  5. 작성 완료로 저장할 때만 소식 이력을 남긴다 — 처음 완료 = created, 완료 후 수정 = updated
+ *     완료 일지를 바뀐 내용 없이 다시 저장하면 아무것도 바꾸지 않는다 (소식이 쌓이지 않게)
  *  6. 활동 시간은 10:00~17:00, 30분 단위, 같은 일지 안에서 겹치지 않게 (명세서 8.5, 프론트 ACTIVITY_SLOTS와 같음)
  *     작성 완료로 저장할 때는 모든 활동에 시간이 있어야 한다
  */
@@ -151,6 +154,7 @@ public class DiaryService {
         if (before == null) {
             throw ApiException.notFound("일지");
         }
+        DiaryResponse previous = get(diaryId);                      // 바뀐 내용이 있는지 비교용
         // 저장된 일지의 이용자·날짜는 바꾸지 않는다 (명세서 9장 B-8)
         if (before.clientId() != c.clientId || !before.date().equals(c.date)) {
             throw ApiException.badRequest("저장된 일지의 이용자나 날짜는 바꿀 수 없어요.");
@@ -170,11 +174,35 @@ public class DiaryService {
         repo.deleteRecords(logId);
         insertActivities(logId, c.activities);
 
+        DiaryResponse saved = get(String.valueOf(logId));
+        // 규칙 5: 완료 일지를 그대로 다시 저장했으면 방금 쓴 것을 되돌린다 (수정자·수정 시각·소식 모두 그대로)
+        if (wasCompleted && sameContent(previous, saved)) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return previous;
+        }
         // 규칙 5: 완료로 저장할 때만 소식 이력
         if ("completed".equals(c.status)) {
             repo.insertHistory(logId, wasCompleted ? "updated" : "created", actorId);
         }
-        return get(String.valueOf(logId));
+        return saved;
+    }
+
+    /** 일지 내용이 같은지 (번호·작성자·시각은 빼고 비교. 활동 번호는 저장할 때마다 새로 붙으므로 뺀다) */
+    private static boolean sameContent(DiaryResponse a, DiaryResponse b) {
+        return a.status().equals(b.status())
+                && a.weather().equals(b.weather())
+                && a.condition().equals(b.condition())
+                && Objects.equals(a.conditionOther(), b.conditionOther())
+                && a.notes().equals(b.notes())
+                && withoutIds(a.activities()).equals(withoutIds(b.activities()));
+    }
+
+    private static List<ActivityDto> withoutIds(List<ActivityDto> activities) {
+        return activities.stream()
+                .map(x -> new ActivityDto(null, x.startTime(), x.endTime(), x.participation(), x.participationOther(),
+                        x.detail(), x.preSupport(), x.preSupportOther(), x.reaction(), x.reactionOther(),
+                        x.positiveSupport(), x.positiveSupportOther(), x.hasBehavior(), x.behaviors()))
+                .toList();
     }
 
     // ==================================================================
