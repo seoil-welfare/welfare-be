@@ -45,6 +45,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
  *     완료 일지를 바뀐 내용 없이 다시 저장하면 아무것도 바꾸지 않는다 (소식이 쌓이지 않게)
  *  6. 활동 시간은 10:00~17:00, 30분 단위, 같은 일지 안에서 겹치지 않게 (명세서 8.5, 프론트 ACTIVITY_SLOTS와 같음)
  *     작성 완료로 저장할 때는 모든 활동에 시간이 있어야 한다
+ *  7. 수정(PUT)은 불러올 때 받은 updatedAt을 함께 보낸다 — 그사이 다른 사람이 저장했으면 409 DIARY_UPDATED_BY_OTHER (명세서 4.6)
  */
 @Service
 public class DiaryService {
@@ -155,6 +156,7 @@ public class DiaryService {
             throw ApiException.notFound("일지");
         }
         DiaryResponse previous = get(diaryId);                      // 바뀐 내용이 있는지 비교용
+        checkNotUpdatedByOther(req.updatedAt(), previous);          // 규칙 7
         // 저장된 일지의 이용자·날짜는 바꾸지 않는다 (명세서 9장 B-8)
         if (before.clientId() != c.clientId || !before.date().equals(c.date)) {
             throw ApiException.badRequest("저장된 일지의 이용자나 날짜는 바꿀 수 없어요.");
@@ -185,6 +187,32 @@ public class DiaryService {
             repo.insertHistory(logId, wasCompleted ? "updated" : "created", actorId);
         }
         return saved;
+    }
+
+    /**
+     * 규칙 7: 불러온 뒤 다른 사람이 먼저 저장했으면 409 DIARY_UPDATED_BY_OTHER (명세서 4.6).
+     * 요청의 updatedAt이 DB 값과 다르면 저장하지 않는다. 그대로 덮어쓰면 먼저 저장한 내용이 말없이 사라진다.
+     */
+    private static void checkNotUpdatedByOther(String requestUpdatedAt, DiaryResponse current) {
+        if (requestUpdatedAt == null || requestUpdatedAt.isBlank()) {
+            throw ApiException.badRequest("일지를 다시 불러온 뒤 저장해 주세요.");   // 불러올 때 받은 updatedAt이 없음
+        }
+        boolean same;
+        try {
+            same = OffsetDateTime.parse(requestUpdatedAt.trim()).toInstant()
+                    .equals(OffsetDateTime.parse(current.updatedAt()).toInstant());   // 시간대 표기가 달라도 같은 시각이면 같음
+        } catch (DateTimeParseException e) {
+            throw ApiException.badRequest("updatedAt 형식이 올바르지 않아요.");
+        }
+        if (!same) {
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("updatedAt", current.updatedAt());                 // 지금 저장된 수정 시각
+            if (current.lastEditorId() != null) {
+                details.put("lastEditorId", current.lastEditorId());       // 마지막으로 수정한 직원 (작성 완료 후 수정만)
+            }
+            throw new ApiException(HttpStatus.CONFLICT, "DIARY_UPDATED_BY_OTHER",
+                    "다른 분이 먼저 수정했어요. 최신 내용을 다시 불러와 주세요.", details);
+        }
     }
 
     /** 일지 내용이 같은지 (번호·작성자·시각은 빼고 비교. 활동 번호는 저장할 때마다 새로 붙으므로 뺀다) */
