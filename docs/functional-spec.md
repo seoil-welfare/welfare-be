@@ -125,7 +125,7 @@
 | **JW-05** 활동 요약<br><sub>기획서 FR-12*</sub> | 시작 시각순으로 시간·요약을 보여 주고, 도전적 행동이 있으면 "도전적 행동 N건" 배지와 배경으로 강조. 누르면 활동 수정. | - | -<br>*-* | 구현 |
 | **JW-06** 활동 추가<br><sub>기획서 FR-13</sub> | "활동 N건"으로 표시(N/7 표기 제거). 개수 제한 없음. | 개수 제한이 정해지면 서버도 검사한다. | -<br>*-* | 구현 |
 | **JW-07** 특이사항<br><sub>기획서 FR-14</sub> | 자유 입력. | 그대로 저장한다. | (저장 시 함께)<br>*daily_log.remark* | 구현 |
-| **JW-08** 나중에 이어서<br><sub>기획서 FR-15</sub> | 상태 draft로 저장하고 성공하면 입력을 비운 뒤 일지 상세로 이동. 실패하면 입력 유지, 자동 재시도 안 함. 응답이 없으면 "저장 여부를 확인하지 못했어요" 안내. | 일지와 활동 전체를 한 트랜잭션으로 저장한다(기존 활동 삭제 후 새로 넣기). 소식 이력은 남기지 않는다. 수정(PUT)이면 updatedAt을 비교해 다르면 409(DIARY_UPDATED_BY_OTHER) — 제안(4.6). | POST /diaries<br>PUT /diaries/:id<br>*daily_log.status,<br>activity_record,<br>record_** | 구현<br>동시 수정 규칙은 프론트 수정 필요 |
+| **JW-08** 나중에 이어서<br><sub>기획서 FR-15</sub> | 상태 draft로 저장하고 성공하면 입력을 비운 뒤 일지 상세로 이동. 실패하면 입력 유지, 자동 재시도 안 함. 응답이 없으면 "저장 여부를 확인하지 못했어요" 안내. | 일지와 활동 전체를 한 트랜잭션으로 저장한다(기존 활동 삭제 후 새로 넣기). 소식 이력은 남기지 않는다. 수정(PUT)이면 updatedAt을 비교해 다르면 409(DIARY_UPDATED_BY_OTHER) (4.6). | POST /diaries<br>PUT /diaries/:id<br>*daily_log.status,<br>activity_record,<br>record_** | 구현 |
 | **JW-09** 작성 완료<br><sub>기획서 FR-16</sub> | 상태 completed로 저장하고 일지 상세로 이동. | JW-08과 같이 저장. 처음 완료면 '등록', 완료 일지를 다시 저장하면 '수정' 이력과 수정자를 기록. 완료 → 작성 중 되돌리기는 400(INVALID_STATUS_TRANSITION)으로 거부(4.5). | POST /diaries<br>PUT /diaries/:id<br>*daily_log,<br>log_history* | 구현<br>상태 전이 규칙은 서버에서 적용 |
 | **JW-10** 상단 '임시저장'<br><sub>기획서 신규</sub> | 알림만 띄우고 서버에 저장하지 않는다. 화면도 그대로. 브라우저를 닫으면 입력이 사라진다. | 제안: status draft로 서버에 저장한다. 첫 저장 응답의 id를 작성 중 데이터에 넣고, 이후 저장은 PUT으로 보낸다(8.4). | (제안)<br>POST → PUT<br>*daily_log.status* | 시연용<br>서버 저장으로 변경 제안 |
 | **JW-11** 중복 제출 막기<br><sub>기획서 신규</sub> | 저장 중에는 두 버튼을 모두 비활성화한다. | 멱등성 지원 여부(B-2). | -<br>*-* | 구현 |
@@ -323,7 +323,7 @@
 | 403 | FORBIDDEN | 권한이 없는 기능 요청 (8.1) | 조회: 문구 + 다시 시도 / 저장: 알림 | 구현 |
 | 404 | NOT_FOUND | 일지 · 이용자 · 직원 없음 | 상세 화면은 "찾을 수 없음" 화면 | 구현 |
 | 409 | DIARY_ALREADY_EXISTS | 같은 이용자 · 날짜 일지가 이미 있음. details.existingDiaryId 포함 (B-1) | 안내 후 기존 일지로 이동 (프론트 수정 필요) | 제안 |
-| 409 | DIARY_UPDATED_BY_OTHER | 다른 사람이 먼저 수정함 — updatedAt 불일치 (4.6) | 안내 후 최신 내용 다시 불러오기 (프론트 수정 필요) | 제안 |
+| 409 | DIARY_UPDATED_BY_OTHER | 다른 사람이 먼저 수정함 — updatedAt 불일치 (4.6). details: updatedAt, lastEditorId(완료 후 수정만) | 확인 후 최신 내용 다시 불러오기 | 구현 |
 | 409 | DUPLICATE_LOGIN_ID | 계정 추가 시 아이디 중복 | 아이디 입력란 오류 | 구현 |
 | 500 | INTERNAL_ERROR | 서버 내부 오류 | 조회는 2회 자동 재시도 후 다시 시도, 저장은 재시도 안 함 | 구현 |
 
@@ -356,7 +356,7 @@ message는 화면에 그대로 표시되므로 사용자가 이해할 수 있는
 | 필드 | 형식 | 설명 |
 | --- | --- | --- |
 | diaryId | 문자열, 선택 | 없으면 새 일지(POST), 있으면 수정(PUT) |
-| updatedAt | ISO 8601, 제안 | PUT일 때 필수. 불러올 때 받은 값을 그대로 돌려보냄 (4.6). 현재 프론트는 보내지 않음 |
+| updatedAt | ISO 8601 | PUT일 때 필수(없으면 400). 불러오거나 마지막으로 저장할 때 받은 값을 그대로 돌려보냄 (4.6) |
 | userId · date | 문자열 · YYYY-MM-DD | 대상 이용자와 작성일 |
 | status | draft \| completed | 작성 중 / 작성 완료 (4.5) |
 | weather · condition · conditionOther | 현재 한글 라벨 | 예: "맑음", "기타" + 직접 입력. 코드 전환 후에는 코드 (5.1) |
@@ -378,7 +378,7 @@ message는 화면에 그대로 표시되므로 사용자가 이해할 수 있는
 
 작성 완료된 일지도 계속 수정할 수 있다. 상태는 completed로 유지되고 수정 이력이 남는다. 실수로 '작성 완료'를 누른 경우에도 이 방식으로 고친다. 되돌리기를 막는 이유는, 되돌리면 그 일지가 통계에서 갑자기 빠지고 소식에도 기록이 남지 않기 때문이다.
 
-### 4.6. 동시 수정 규칙 (제안, B-3)
+### 4.6. 동시 수정 규칙 (B-3)
 
 1. 프론트는 일지를 불러올 때 받은 updatedAt을 작성 중 데이터에 보관하고, PUT 요청에 그대로 담아 보낸다.
 
@@ -431,12 +431,13 @@ message는 화면에 그대로 표시되므로 사용자가 이해할 수 있는
 
 | 경로 | 응답 | 대응 화면 | 대체하는 계산 |
 | --- | --- | --- | --- |
-| GET /stats/summary | { period, behavior: { count, days, delta, previousEmpty, byType[], trend[] }, participation[], reaction[], preSupport[], positiveSupport[], condition[] } | ST | ST-04~ST-10 |
-| GET /stats/behaviors | …&type=all\|otherHarm\|selfHarm\|destruction\|other&cursor → { summary, typeCounts[], details[], records: { items[], nextCursor } } | SB | SB-03~SB-06 |
-| GET /stats/activities | …&focus=참여 활동 코드 → { summary: { total, kinds, otherCount }, byActivity[], behaviorByActivity[], reactionByFocus[] } | SA | SA-03~SA-06 |
-| GET /stats/categories/:category | category = reaction \| preSupport \| positiveSupport \| condition → { items[] } | SC | SC-01 |
+| GET /stats/summary | { period, completedDiaries, behavior: { count, days, delta, previousEmpty, byType, typeSummary, trend[], details[], records[] }, participation[], reaction[], preSupport[], positiveSupport[], condition[], activities: { totalCount, kindCount, otherCount, behaviorByParticipation[], reactionByParticipation[] } } | ST, SB, SA, SC | ST-04~ST-10, SB-03~SB-06, SA-03~SA-06, SC-01 |
 
-목록 항목(CountItem)은 { code, label, count }. 필드 이름은 프론트 statsService.ts의 반환 타입과 같게 맞춘다(화면 수정이 가장 적음).
+**구현됨.** 통계 화면 4개가 이 응답 하나를 함께 쓴다(상세 화면으로 옮겨도 다시 부르지 않는다). 처음 제안한 /stats/behaviors · /stats/activities · /stats/categories는 따로 만들지 않았다. 유형 필터·기준 참여 활동은 프론트가 이 응답에서 고른다.
+
+- 목록 항목(CountItem)은 { code, label, count }. 많은 순, 같으면 목록 순서이며 0건 항목도 넣는다. 통계 메인은 0건을 빼고 보여 준다.
+- details는 세부 행동 { type, detailId, count } (1건 이상만). records는 도전적 행동이 있었던 활동 1개 = 1줄, 날짜·시작 시각 최신순.
+- 규칙은 프론트 statsService.ts의 statsSummary와 같다. 같은 DB 일지로 둘을 비교해 이용자 4명 × 기간 8개가 모두 같은 값임을 확인했다.
 
 **집계 규칙 (개발계획서 「통계 집계 공통 규칙」을 서버에서 그대로 적용)**
 
@@ -533,7 +534,7 @@ message는 화면에 그대로 표시되므로 사용자가 이해할 수 있는
 | --- | --- | --- | --- |
 | B-1 | 이용자 1명당 하루 1건 | mock은 같은 이용자·날짜를 덮어씀 | DB UNIQUE 제약으로 막고, 409 DIARY_ALREADY_EXISTS + 기존 일지 id (4.2, 4.3) |
 | B-2 | 저장 중복 방지 | 자동 재시도 없음 | B-1이 409면 새 일지 중복은 DB가 막음. PUT은 같은 내용을 다시 보내도 결과가 같음. 별도 멱등 키 불필요 |
-| B-3 | 동시 수정 | 마지막 저장이 이김 | updatedAt 비교 + 409 DIARY_UPDATED_BY_OTHER (4.6, 제안) |
+| B-3 | 동시 수정 | 저장마다 updatedAt을 보냄 | updatedAt 비교 + 409 DIARY_UPDATED_BY_OTHER (4.6, 구현) |
 | B-4 | 선택 항목 값 형식 | 한글 라벨 저장 | 코드 저장 + GET /categories (5.1, 제안) |
 | B-5 | 작성 중 일지 보존 | 상단 임시저장은 서버 저장 안 함 | 서버 draft 저장으로 통일, 첫 저장 후 PUT (8.4, 제안) |
 | B-6 | 화면 접근 제한 | 메뉴만 숨김 | 모든 권한은 서버 검사 (4.1), 권한 기준안 (8.1) |

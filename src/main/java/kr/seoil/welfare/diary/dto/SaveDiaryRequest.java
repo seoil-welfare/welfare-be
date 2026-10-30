@@ -13,6 +13,7 @@ public record SaveDiaryRequest(
         String condition,               // 컨디션 이름 ("양호" ...)
         String conditionOther,          // 컨디션 '기타' 직접 입력
         List<ActivityDto> activities,   // 활동 목록 (통째로 교체)
-        String notes                    // 특이사항 (remark)
+        String notes,                   // 특이사항 (remark)
+        String updatedAt                // PUT일 때 필수. 불러올 때 받은 updatedAt 그대로 (동시 수정 확인, 명세서 4.6)
 ) {
 }

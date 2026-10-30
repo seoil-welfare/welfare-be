@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import kr.seoil.welfare.common.ApiException;
@@ -31,6 +32,7 @@ import kr.seoil.welfare.diary.dto.SaveDiaryRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 /**
  * 일지 업무 규칙 (기능명세서 4.3~4.5, 8.2)
@@ -40,6 +42,10 @@ import org.springframework.transaction.annotation.Transactional;
  *  3. 작성자는 서버가 정한다 — 처음 저장한 직원, 수정해도 그대로
  *  4. 저장할 때 활동은 통째로 교체 (지우고 다시 넣기)
  *  5. 작성 완료로 저장할 때만 소식 이력을 남긴다 — 처음 완료 = created, 완료 후 수정 = updated
+ *     완료 일지를 바뀐 내용 없이 다시 저장하면 아무것도 바꾸지 않는다 (소식이 쌓이지 않게)
+ *  6. 활동 시간은 10:00~17:00, 30분 단위, 같은 일지 안에서 겹치지 않게 (명세서 8.5, 프론트 ACTIVITY_SLOTS와 같음)
+ *     작성 완료로 저장할 때는 모든 활동에 시간이 있어야 한다
+ *  7. 수정(PUT)은 불러올 때 받은 updatedAt을 함께 보낸다 — 그사이 다른 사람이 저장했으면 409 DIARY_UPDATED_BY_OTHER (명세서 4.6)
  */
 @Service
 public class DiaryService {
@@ -51,6 +57,12 @@ public class DiaryService {
     private static final List<String> BEHAVIOR_TYPES = List.of("otherHarm", "selfHarm", "destruction", "other");
     /** 연결 테이블이 있는 다중 선택 항목 */
     private static final List<Kind> MULTI = List.of(Kind.PARTICIPATION, Kind.PRE_SUPPORT, Kind.REACTION, Kind.POSITIVE_SUPPORT);
+    /** '기타' 직접 입력 최대 글자 수 (DB VARCHAR(200)) */
+    private static final int ETC_MAX = 200;
+    /** 활동 시간 범위와 단위 (복지관 양식) */
+    private static final LocalTime FIRST_TIME = LocalTime.of(10, 0);
+    private static final LocalTime LAST_TIME = LocalTime.of(17, 0);
+    private static final int SLOT_MINUTES = 30;
 
     private final DiaryRepository repo;
     private final Catalog catalog;
@@ -143,6 +155,8 @@ public class DiaryService {
         if (before == null) {
             throw ApiException.notFound("일지");
         }
+        DiaryResponse previous = get(diaryId);                      // 바뀐 내용이 있는지 비교용
+        checkNotUpdatedByOther(req.updatedAt(), previous);          // 규칙 7
         // 저장된 일지의 이용자·날짜는 바꾸지 않는다 (명세서 9장 B-8)
         if (before.clientId() != c.clientId || !before.date().equals(c.date)) {
             throw ApiException.badRequest("저장된 일지의 이용자나 날짜는 바꿀 수 없어요.");
@@ -162,11 +176,61 @@ public class DiaryService {
         repo.deleteRecords(logId);
         insertActivities(logId, c.activities);
 
+        DiaryResponse saved = get(String.valueOf(logId));
+        // 규칙 5: 완료 일지를 그대로 다시 저장했으면 방금 쓴 것을 되돌린다 (수정자·수정 시각·소식 모두 그대로)
+        if (wasCompleted && sameContent(previous, saved)) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return previous;
+        }
         // 규칙 5: 완료로 저장할 때만 소식 이력
         if ("completed".equals(c.status)) {
             repo.insertHistory(logId, wasCompleted ? "updated" : "created", actorId);
         }
-        return get(String.valueOf(logId));
+        return saved;
+    }
+
+    /**
+     * 규칙 7: 불러온 뒤 다른 사람이 먼저 저장했으면 409 DIARY_UPDATED_BY_OTHER (명세서 4.6).
+     * 요청의 updatedAt이 DB 값과 다르면 저장하지 않는다. 그대로 덮어쓰면 먼저 저장한 내용이 말없이 사라진다.
+     */
+    private static void checkNotUpdatedByOther(String requestUpdatedAt, DiaryResponse current) {
+        if (requestUpdatedAt == null || requestUpdatedAt.isBlank()) {
+            throw ApiException.badRequest("일지를 다시 불러온 뒤 저장해 주세요.");   // 불러올 때 받은 updatedAt이 없음
+        }
+        boolean same;
+        try {
+            same = OffsetDateTime.parse(requestUpdatedAt.trim()).toInstant()
+                    .equals(OffsetDateTime.parse(current.updatedAt()).toInstant());   // 시간대 표기가 달라도 같은 시각이면 같음
+        } catch (DateTimeParseException e) {
+            throw ApiException.badRequest("updatedAt 형식이 올바르지 않아요.");
+        }
+        if (!same) {
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("updatedAt", current.updatedAt());                 // 지금 저장된 수정 시각
+            if (current.lastEditorId() != null) {
+                details.put("lastEditorId", current.lastEditorId());       // 마지막으로 수정한 직원 (작성 완료 후 수정만)
+            }
+            throw new ApiException(HttpStatus.CONFLICT, "DIARY_UPDATED_BY_OTHER",
+                    "다른 분이 먼저 수정했어요. 최신 내용을 다시 불러와 주세요.", details);
+        }
+    }
+
+    /** 일지 내용이 같은지 (번호·작성자·시각은 빼고 비교. 활동 번호는 저장할 때마다 새로 붙으므로 뺀다) */
+    private static boolean sameContent(DiaryResponse a, DiaryResponse b) {
+        return a.status().equals(b.status())
+                && a.weather().equals(b.weather())
+                && a.condition().equals(b.condition())
+                && Objects.equals(a.conditionOther(), b.conditionOther())
+                && a.notes().equals(b.notes())
+                && withoutIds(a.activities()).equals(withoutIds(b.activities()));
+    }
+
+    private static List<ActivityDto> withoutIds(List<ActivityDto> activities) {
+        return activities.stream()
+                .map(x -> new ActivityDto(null, x.startTime(), x.endTime(), x.participation(), x.participationOther(),
+                        x.detail(), x.preSupport(), x.preSupportOther(), x.reaction(), x.reactionOther(),
+                        x.positiveSupport(), x.positiveSupportOther(), x.hasBehavior(), x.behaviors()))
+                .toList();
     }
 
     // ==================================================================
@@ -205,27 +269,35 @@ public class DiaryService {
         Item weather = catalog.byLabel(Kind.WEATHER, req.weather());
         Item condition = catalog.byLabel(Kind.CONDITION, req.condition());
         // '기타' 컨디션일 때만 직접 입력을 저장
-        String conditionEtc = condition.etc() ? trimToNull(req.conditionOther()) : null;
+        String conditionEtc = condition.etc() ? etcText(req.conditionOther()) : null;
 
+        boolean completed = "completed".equals(req.status());
         List<CheckedActivity> activities = new ArrayList<>();
         if (req.activities() != null) {
             for (ActivityDto a : req.activities()) {
-                activities.add(checkActivity(a));
+                activities.add(checkActivity(a, completed));
             }
         }
+        checkNoOverlap(activities);
         return new Checked(parseId(req.userId(), "이용자"), parseDate(req.date()), req.status(),
                 weather, condition, conditionEtc, trimToNull(req.notes()), activities);
     }
 
-    private CheckedActivity checkActivity(ActivityDto a) {
+    private CheckedActivity checkActivity(ActivityDto a, boolean completed) {
         if (a == null) {
             throw ApiException.badRequest("비어 있는 활동이 있어요.");
         }
         LocalTime start = parseTime(a.startTime());
         LocalTime end = parseTime(a.endTime());
+        // 작성 중은 시간을 비워 둘 수 있지만, 작성 완료는 모든 활동에 시간이 있어야 한다
+        if (completed && (start == null || end == null)) {
+            throw ApiException.badRequest("활동 시간을 골라 주세요.");
+        }
         if (start != null && end != null && !end.isAfter(start)) {
             throw ApiException.badRequest("종료 시간은 시작 시간보다 늦어야 해요.");
         }
+        checkSlotTime(start);
+        checkSlotTime(end);
 
         // 다중 선택 4종류: 이름 → 번호, '기타' 직접 입력 붙이기
         Map<Kind, List<NewPick>> picks = new HashMap<>();
@@ -247,13 +319,36 @@ public class DiaryService {
         return new CheckedActivity(start, end, trimToNull(a.detail()), a.hasBehavior(), picks, behaviors);
     }
 
+    /** 활동 시각은 10:00~17:00 사이의 30분 단위만 */
+    private static void checkSlotTime(LocalTime t) {
+        if (t == null) {
+            return;
+        }
+        if (t.isBefore(FIRST_TIME) || t.isAfter(LAST_TIME) || t.getMinute() % SLOT_MINUTES != 0 || t.getSecond() != 0) {
+            throw ApiException.badRequest("활동 시간은 10:00~17:00 사이에서 30분 단위로 골라 주세요.");
+        }
+    }
+
+    /** 같은 일지 안의 활동 시간이 겹치면 거부 (시간이 있는 활동끼리만 비교) */
+    private static void checkNoOverlap(List<CheckedActivity> activities) {
+        List<CheckedActivity> timed = activities.stream()
+                .filter(a -> a.start() != null && a.end() != null)
+                .sorted(Comparator.comparing(CheckedActivity::start))
+                .toList();
+        for (int i = 1; i < timed.size(); i++) {
+            if (timed.get(i).start().isBefore(timed.get(i - 1).end())) {
+                throw ApiException.badRequest("활동 시간이 다른 활동과 겹쳐요.");
+            }
+        }
+    }
+
     /** 이름 목록 → 저장할 선택 항목. 같은 이름이 두 번 와도 한 번만 */
     private List<NewPick> toPicks(Kind kind, List<String> labels, String otherText) {
         Map<Short, NewPick> result = new LinkedHashMap<>();         // 순서 유지 + 중복 제거
         if (labels != null) {
             for (String label : labels) {
                 Item item = catalog.byLabel(kind, label);
-                String etc = item.etc() ? trimToNull(otherText) : null;   // '기타'에만 직접 입력
+                String etc = item.etc() ? etcText(otherText) : null;      // '기타'에만 직접 입력
                 result.putIfAbsent(item.id(), new NewPick(item.id(), etc));
             }
         }
@@ -273,7 +368,7 @@ public class DiaryService {
             if ("other".equals(b.type())) {
                 // 상위 '기타'는 세부 목록 없이 직접 입력만 → 'other' 항목 하나로 저장
                 BehaviorItem item = catalog.behaviorByCode("other");
-                result.putIfAbsent(item.id(), new NewPick(item.id(), trimToNull(b.otherText())));
+                result.putIfAbsent(item.id(), new NewPick(item.id(), etcText(b.otherText())));
                 continue;
             }
             if (b.detailIds() == null) {
@@ -284,7 +379,7 @@ public class DiaryService {
                 if (item == null || !item.areaCode().equals(b.type())) {    // 다른 영역 항목이 섞이면 거부
                     throw ApiException.badRequest("'" + code + "'은(는) 선택할 수 없는 세부 행동이에요.");
                 }
-                String etc = item.etc() ? trimToNull(b.otherText()) : null;
+                String etc = item.etc() ? etcText(b.otherText()) : null;
                 result.putIfAbsent(item.id(), new NewPick(item.id(), etc));
             }
         }
@@ -435,6 +530,15 @@ public class DiaryService {
 
     private static String trimToNull(String s) {
         return blank(s) ? null : s.trim();
+    }
+
+    /** '기타' 직접 입력. DB 칸(200자)을 넘으면 서버 오류 대신 400으로 알려 준다 */
+    private static String etcText(String s) {
+        String text = trimToNull(s);
+        if (text != null && text.length() > ETC_MAX) {
+            throw ApiException.badRequest("'기타' 직접 입력은 " + ETC_MAX + "자까지 쓸 수 있어요.");
+        }
+        return text;
     }
 
     /** 요청 본문·검색 조건의 id ("3") → 숫자. 잘못되면 400 */

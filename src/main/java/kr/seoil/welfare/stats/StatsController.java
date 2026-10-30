@@ -16,8 +16,7 @@ import org.springframework.web.bind.annotation.SessionAttribute;
  *  GET /api/stats/summary?userId=1&unit=quarter&year=2026&quarter=3
  *  GET /api/stats/summary?userId=1&unit=year&year=2026
  *
- * 지금 프론트는 GET /api/diaries로 일지를 받아 직접 계산한다.
- * 프론트(useStatsDiaries)를 이 API로 바꾸면 휴대폰이 받는 데이터가 일지 수백 건 → 숫자 몇십 개로 줄어든다.
+ * 프론트 통계 화면 4개(useStatsSummary)가 이 응답 하나로 그린다. 일지 수백 건 대신 숫자만 받는다.
  */
 @RestController
 @RequestMapping("/api/stats")

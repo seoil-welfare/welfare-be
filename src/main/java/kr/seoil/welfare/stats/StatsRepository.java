@@ -1,6 +1,9 @@
 package kr.seoil.welfare.stats;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import kr.seoil.welfare.stats.StatsPeriod.Range;
@@ -81,6 +84,98 @@ public class StatsRepository {
                         + " GROUP BY x." + idColumn,
                 params(clientId, range),
                 rs -> { result.put(rs.getShort("item_id"), rs.getInt("cnt")); });
+        return result;
+    }
+
+    /** 영역별 도전적 행동 발생 일수 { otherHarm: 2, ... } (없는 영역은 빠짐) */
+    public Map<String, Integer> behaviorDaysByType(long clientId, Range range) {
+        Map<String, Integer> result = new HashMap<>();
+        jdbc.query("SELECT ba.code, count(DISTINCT l.log_date) AS cnt" + BEHAVIOR_FROM + " GROUP BY ba.code",
+                params(clientId, range),
+                rs -> { result.put(rs.getString("code"), rs.getInt("cnt")); });
+        return result;
+    }
+
+    /** 세부 행동 1개의 건수 (영역 코드, 세부 항목 코드) */
+    public record DetailRow(String type, String detailId, int count) {
+    }
+
+    /** 세부 행동별 건수 — 영역 순서 → 목록 순서 (1건 이상만) */
+    public List<DetailRow> behaviorDetailCounts(long clientId, Range range) {
+        return jdbc.query("SELECT ba.code AS type, bi.code AS detail, count(*) AS cnt" + BEHAVIOR_FROM
+                        + " GROUP BY ba.code, bi.code, ba.sort_order, bi.sort_order"
+                        + " ORDER BY ba.sort_order, bi.sort_order",
+                params(clientId, range),
+                (rs, n) -> new DetailRow(rs.getString("type"), rs.getString("detail"), rs.getInt("cnt")));
+    }
+
+    /** 발생 기록 1줄 = 도전적 행동 1건 (같은 활동이면 recordId가 같다) */
+    public record BehaviorRow(long logId, LocalDate date, long recordId, LocalTime start, LocalTime end,
+                              String type, String detailId, String etcText) {
+    }
+
+    /** 발생 기록 — 날짜·시작 시각 최신순, 같은 활동 안에서는 영역 순서 → 목록 순서 */
+    public List<BehaviorRow> behaviorRows(long clientId, Range range) {
+        return jdbc.query("SELECT l.log_id, l.log_date, ar.record_id, ar.start_time, ar.end_time,"
+                        + " ba.code AS type, bi.code AS detail, rb.etc_text" + BEHAVIOR_FROM
+                        + " ORDER BY l.log_date DESC, ar.start_time DESC NULLS LAST, ar.record_id,"
+                        + " ba.sort_order, bi.sort_order",
+                params(clientId, range),
+                (rs, n) -> new BehaviorRow(rs.getLong("log_id"), rs.getObject("log_date", LocalDate.class),
+                        rs.getLong("record_id"), rs.getObject("start_time", LocalTime.class),
+                        rs.getObject("end_time", LocalTime.class), rs.getString("type"),
+                        rs.getString("detail"), rs.getString("etc_text")));
+    }
+
+    /** 작성 완료 일지 수 */
+    public int completedCount(long clientId, Range range) {
+        Integer n = jdbc.queryForObject("SELECT count(*) FROM daily_log l WHERE" + LOG_FILTER,
+                params(clientId, range), Integer.class);
+        return n == null ? 0 : n;
+    }
+
+    /** 참여 활동 '기타'를 고르고 내용을 직접 쓴 건수 (FR-53) */
+    public int participationOtherCount(long clientId, Range range) {
+        Integer n = jdbc.queryForObject("SELECT count(*) FROM record_activity_type x"
+                        + " JOIN activity_type t ON t.activity_type_id = x.activity_type_id"
+                        + " JOIN activity_record ar ON ar.record_id = x.record_id"
+                        + " JOIN daily_log l ON l.log_id = ar.log_id"
+                        + " WHERE" + LOG_FILTER
+                        + " AND t.is_etc AND btrim(coalesce(x.etc_text, '')) <> ''",
+                params(clientId, range), Integer.class);
+        return n == null ? 0 : n;
+    }
+
+    /**
+     * 참여 활동별 도전적 행동 건수 { 활동 번호: 건수 } (FR-55)
+     * 한 활동에서 참여 활동을 여러 개 골랐으면 고른 활동마다 같은 건수를 더한다 (프론트와 같음, 배분 방식은 미확정)
+     */
+    public Map<Short, Integer> behaviorByParticipation(long clientId, Range range) {
+        Map<Short, Integer> result = new HashMap<>();
+        jdbc.query("SELECT x.activity_type_id AS item_id, sum(b.cnt) AS cnt FROM record_activity_type x"
+                        + " JOIN (SELECT ar.record_id, count(*) AS cnt" + BEHAVIOR_FROM + " GROUP BY ar.record_id) b"
+                        + " ON b.record_id = x.record_id"
+                        + " GROUP BY x.activity_type_id",
+                params(clientId, range),
+                rs -> { result.put(rs.getShort("item_id"), rs.getInt("cnt")); });
+        return result;
+    }
+
+    /** 참여 활동별 이용자 반응 건수 { 활동 번호: { 반응 번호: 건수 } } (FR-56) */
+    public Map<Short, Map<Short, Integer>> reactionByParticipation(long clientId, Range range) {
+        Map<Short, Map<Short, Integer>> result = new HashMap<>();
+        jdbc.query("SELECT x.activity_type_id AS activity, r.reaction_id AS reaction, count(*) AS cnt"
+                        + " FROM record_activity_type x"
+                        + " JOIN record_reaction r ON r.record_id = x.record_id"
+                        + " JOIN activity_record ar ON ar.record_id = x.record_id"
+                        + " JOIN daily_log l ON l.log_id = ar.log_id"
+                        + " WHERE" + LOG_FILTER
+                        + " GROUP BY x.activity_type_id, r.reaction_id",
+                params(clientId, range),
+                rs -> {
+                    result.computeIfAbsent(rs.getShort("activity"), k -> new HashMap<>())
+                            .put(rs.getShort("reaction"), rs.getInt("cnt"));
+                });
         return result;
     }
 
