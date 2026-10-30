@@ -40,6 +40,8 @@ import org.springframework.transaction.annotation.Transactional;
  *  3. 작성자는 서버가 정한다 — 처음 저장한 직원, 수정해도 그대로
  *  4. 저장할 때 활동은 통째로 교체 (지우고 다시 넣기)
  *  5. 작성 완료로 저장할 때만 소식 이력을 남긴다 — 처음 완료 = created, 완료 후 수정 = updated
+ *  6. 활동 시간은 10:00~17:00, 30분 단위, 같은 일지 안에서 겹치지 않게 (명세서 8.5, 프론트 ACTIVITY_SLOTS와 같음)
+ *     작성 완료로 저장할 때는 모든 활동에 시간이 있어야 한다
  */
 @Service
 public class DiaryService {
@@ -53,6 +55,10 @@ public class DiaryService {
     private static final List<Kind> MULTI = List.of(Kind.PARTICIPATION, Kind.PRE_SUPPORT, Kind.REACTION, Kind.POSITIVE_SUPPORT);
     /** '기타' 직접 입력 최대 글자 수 (DB VARCHAR(200)) */
     private static final int ETC_MAX = 200;
+    /** 활동 시간 범위와 단위 (복지관 양식) */
+    private static final LocalTime FIRST_TIME = LocalTime.of(10, 0);
+    private static final LocalTime LAST_TIME = LocalTime.of(17, 0);
+    private static final int SLOT_MINUTES = 30;
 
     private final DiaryRepository repo;
     private final Catalog catalog;
@@ -209,25 +215,33 @@ public class DiaryService {
         // '기타' 컨디션일 때만 직접 입력을 저장
         String conditionEtc = condition.etc() ? etcText(req.conditionOther()) : null;
 
+        boolean completed = "completed".equals(req.status());
         List<CheckedActivity> activities = new ArrayList<>();
         if (req.activities() != null) {
             for (ActivityDto a : req.activities()) {
-                activities.add(checkActivity(a));
+                activities.add(checkActivity(a, completed));
             }
         }
+        checkNoOverlap(activities);
         return new Checked(parseId(req.userId(), "이용자"), parseDate(req.date()), req.status(),
                 weather, condition, conditionEtc, trimToNull(req.notes()), activities);
     }
 
-    private CheckedActivity checkActivity(ActivityDto a) {
+    private CheckedActivity checkActivity(ActivityDto a, boolean completed) {
         if (a == null) {
             throw ApiException.badRequest("비어 있는 활동이 있어요.");
         }
         LocalTime start = parseTime(a.startTime());
         LocalTime end = parseTime(a.endTime());
+        // 작성 중은 시간을 비워 둘 수 있지만, 작성 완료는 모든 활동에 시간이 있어야 한다
+        if (completed && (start == null || end == null)) {
+            throw ApiException.badRequest("활동 시간을 골라 주세요.");
+        }
         if (start != null && end != null && !end.isAfter(start)) {
             throw ApiException.badRequest("종료 시간은 시작 시간보다 늦어야 해요.");
         }
+        checkSlotTime(start);
+        checkSlotTime(end);
 
         // 다중 선택 4종류: 이름 → 번호, '기타' 직접 입력 붙이기
         Map<Kind, List<NewPick>> picks = new HashMap<>();
@@ -247,6 +261,29 @@ public class DiaryService {
         List<NewPick> behaviors = a.hasBehavior() ? toBehaviorPicks(a.behaviors()) : List.of();
 
         return new CheckedActivity(start, end, trimToNull(a.detail()), a.hasBehavior(), picks, behaviors);
+    }
+
+    /** 활동 시각은 10:00~17:00 사이의 30분 단위만 */
+    private static void checkSlotTime(LocalTime t) {
+        if (t == null) {
+            return;
+        }
+        if (t.isBefore(FIRST_TIME) || t.isAfter(LAST_TIME) || t.getMinute() % SLOT_MINUTES != 0 || t.getSecond() != 0) {
+            throw ApiException.badRequest("활동 시간은 10:00~17:00 사이에서 30분 단위로 골라 주세요.");
+        }
+    }
+
+    /** 같은 일지 안의 활동 시간이 겹치면 거부 (시간이 있는 활동끼리만 비교) */
+    private static void checkNoOverlap(List<CheckedActivity> activities) {
+        List<CheckedActivity> timed = activities.stream()
+                .filter(a -> a.start() != null && a.end() != null)
+                .sorted(Comparator.comparing(CheckedActivity::start))
+                .toList();
+        for (int i = 1; i < timed.size(); i++) {
+            if (timed.get(i).start().isBefore(timed.get(i - 1).end())) {
+                throw ApiException.badRequest("활동 시간이 다른 활동과 겹쳐요.");
+            }
+        }
     }
 
     /** 이름 목록 → 저장할 선택 항목. 같은 이름이 두 번 와도 한 번만 */
