@@ -94,6 +94,11 @@ public class Catalog {
         throw new IllegalStateException(kind + " 목록에 없는 번호: " + id);
     }
 
+    /** 한 종류의 항목 전체 (목록 순서) */
+    public List<Item> items(Kind kind) {
+        return data().items().get(kind);
+    }
+
     /** 응답에 넣을 화면 글자 */
     public String label(Kind kind, Item item) {
         return FRONT_LABEL.getOrDefault(kind.name() + ":" + item.code(), item.name());
