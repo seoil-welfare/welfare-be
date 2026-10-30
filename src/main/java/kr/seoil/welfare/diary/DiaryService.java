@@ -51,6 +51,8 @@ public class DiaryService {
     private static final List<String> BEHAVIOR_TYPES = List.of("otherHarm", "selfHarm", "destruction", "other");
     /** 연결 테이블이 있는 다중 선택 항목 */
     private static final List<Kind> MULTI = List.of(Kind.PARTICIPATION, Kind.PRE_SUPPORT, Kind.REACTION, Kind.POSITIVE_SUPPORT);
+    /** '기타' 직접 입력 최대 글자 수 (DB VARCHAR(200)) */
+    private static final int ETC_MAX = 200;
 
     private final DiaryRepository repo;
     private final Catalog catalog;
@@ -205,7 +207,7 @@ public class DiaryService {
         Item weather = catalog.byLabel(Kind.WEATHER, req.weather());
         Item condition = catalog.byLabel(Kind.CONDITION, req.condition());
         // '기타' 컨디션일 때만 직접 입력을 저장
-        String conditionEtc = condition.etc() ? trimToNull(req.conditionOther()) : null;
+        String conditionEtc = condition.etc() ? etcText(req.conditionOther()) : null;
 
         List<CheckedActivity> activities = new ArrayList<>();
         if (req.activities() != null) {
@@ -253,7 +255,7 @@ public class DiaryService {
         if (labels != null) {
             for (String label : labels) {
                 Item item = catalog.byLabel(kind, label);
-                String etc = item.etc() ? trimToNull(otherText) : null;   // '기타'에만 직접 입력
+                String etc = item.etc() ? etcText(otherText) : null;      // '기타'에만 직접 입력
                 result.putIfAbsent(item.id(), new NewPick(item.id(), etc));
             }
         }
@@ -273,7 +275,7 @@ public class DiaryService {
             if ("other".equals(b.type())) {
                 // 상위 '기타'는 세부 목록 없이 직접 입력만 → 'other' 항목 하나로 저장
                 BehaviorItem item = catalog.behaviorByCode("other");
-                result.putIfAbsent(item.id(), new NewPick(item.id(), trimToNull(b.otherText())));
+                result.putIfAbsent(item.id(), new NewPick(item.id(), etcText(b.otherText())));
                 continue;
             }
             if (b.detailIds() == null) {
@@ -284,7 +286,7 @@ public class DiaryService {
                 if (item == null || !item.areaCode().equals(b.type())) {    // 다른 영역 항목이 섞이면 거부
                     throw ApiException.badRequest("'" + code + "'은(는) 선택할 수 없는 세부 행동이에요.");
                 }
-                String etc = item.etc() ? trimToNull(b.otherText()) : null;
+                String etc = item.etc() ? etcText(b.otherText()) : null;
                 result.putIfAbsent(item.id(), new NewPick(item.id(), etc));
             }
         }
@@ -435,6 +437,15 @@ public class DiaryService {
 
     private static String trimToNull(String s) {
         return blank(s) ? null : s.trim();
+    }
+
+    /** '기타' 직접 입력. DB 칸(200자)을 넘으면 서버 오류 대신 400으로 알려 준다 */
+    private static String etcText(String s) {
+        String text = trimToNull(s);
+        if (text != null && text.length() > ETC_MAX) {
+            throw ApiException.badRequest("'기타' 직접 입력은 " + ETC_MAX + "자까지 쓸 수 있어요.");
+        }
+        return text;
     }
 
     /** 요청 본문·검색 조건의 id ("3") → 숫자. 잘못되면 400 */
