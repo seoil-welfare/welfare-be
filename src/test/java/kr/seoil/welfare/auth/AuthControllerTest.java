@@ -42,13 +42,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthControllerTest {
 
     private static final StaffDto DEMO =
-            new StaffDto("1", "가 담당", "주간활동지원팀", "사회복지사", "staff", "demo.staff1");
+            new StaffDto("1", "가 담당", "주간활동지원팀", "사회복지사", "staff", "demo.staff1",true);
 
     @Autowired
     private MockMvc mvc;
 
     @MockitoBean
     private AuthService authService;
+
+    @MockitoBean   // 사용 중지 검사 ...
+    private AuthRepository authRepository;
 
     @Test
     @DisplayName("POST /api/auth/login — 성공하면 200과 직원 정보, 세션에 staffId가 들어간다")
@@ -57,6 +60,7 @@ class AuthControllerTest {
         given(authService.me(1L)).willReturn(DEMO);
 
         var result = mvc.perform(post("/api/auth/login")
+
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"loginId\":\"demo.staff1\",\"password\":\"demo1234\",\"autoLogin\":true}"))
                 .andExpect(status().isOk())
