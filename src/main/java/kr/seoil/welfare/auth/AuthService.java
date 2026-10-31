@@ -1,6 +1,9 @@
 package kr.seoil.welfare.auth;
 
 import java.security.SecureRandom;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -32,6 +35,9 @@ public class AuthService {
     private static final Pattern LOGIN_ID = Pattern.compile("[a-z0-9._-]{4,50}");
 
     private static final String DEFAULT_DEPARTMENT = "주간활동지원팀";   // 명세서 SF-02 기본값
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");         // '오늘'은 한국 날짜 기준
+    private static final LocalDate MIN_BIRTH_DATE = LocalDate.of(1900, 1, 1);   // 잘못 친 연도(0199 등) 막기
 
     private static final Set<String> ROLES = Set.of("staff", "teamLead", "director");
     /** 계정 추가를 할 수 있는 역할 (지금 프론트가 팀장·국장에게만 메뉴를 보여 주는 것과 같게) */
@@ -80,7 +86,7 @@ public class AuthService {
         if (body == null) {
             throw ApiException.badRequest("가입 정보를 입력해 주세요.");
         }
-        NewAccount account = checkNewAccount(body.loginId(), body.name(), body.department());
+        NewAccount account = checkNewAccount(body.loginId(), body.name(), body.department(), body.birthDate());
         PasswordPolicy.check(body.password());
         return insertAccount(account, body.password(), "staff");
     }
@@ -110,7 +116,7 @@ public class AuthService {
         if ("director".equals(role) && !"director".equals(actorRole)) {
             throw forbidden("국장 계정은 국장만 추가할 수 있어요.");
         }
-        NewAccount account = checkNewAccount(body.loginId(), body.name(), body.department());
+        NewAccount account = checkNewAccount(body.loginId(), body.name(), body.department(), body.birthDate());
 
         String temporaryPassword = temporaryPassword();
         long staffId = insertAccount(account, temporaryPassword, role);
@@ -134,8 +140,6 @@ public class AuthService {
      *  - 이미 그 상태여도 오류 없이 지금 정보를 돌려준다 (두 번 눌러도 안전)
      * 사용 중지된 직원은 로그인(authenticate)과 내 정보(me)에서 403 ACCOUNT_DISABLED로 막힌다.
      */
-    // 권한 검사 후 계정 정지·해제 (actorId = 요청한 사람, targetId = 바꿀 직원)
-// StaffController에서 deactivate는 active=false, activate는 active=true로 넘어옴
     @Transactional
     public StaffDto setStaffActive(long actorId, String targetId, boolean active) {
         String actorRole = me(actorId).role();                         // 요청한 사람이 사용 중지 상태면 여기서 403
@@ -164,11 +168,12 @@ public class AuthService {
     }
 
     /** 검사를 통과한 새 계정 정보 */
-    private record NewAccount(String loginId, String name, String department) {
+    private record NewAccount(String loginId, String name, String department, LocalDate birthDate) {
     }
 
     /** 회원가입·계정 추가 공통 입력 검사 */
-    private NewAccount checkNewAccount(String rawLoginId, String rawName, String rawDepartment) {
+    private NewAccount checkNewAccount(String rawLoginId, String rawName, String rawDepartment,
+                                       String rawBirthDate) {
         String loginId = trimToEmpty(rawLoginId).toLowerCase();         // 대소문자로 아이디가 갈리지 않게
         String name = trimToEmpty(rawName);
         String department = trimToEmpty(rawDepartment);
@@ -187,11 +192,38 @@ public class AuthService {
         } else if (department.length() > 50) {
             throw ApiException.badRequest("소속 팀 이름이 너무 길어요.");
         }
+        LocalDate birthDate = parseBirthDate(rawBirthDate);              // 비어 있으면 null
         // 미리 한 번 확인해서 보통의 중복은 친절한 문구로 돌려준다
         if (authRepository.existsLoginId(loginId)) {
             throw duplicateLoginId();
         }
-        return new NewAccount(loginId, name, department);
+        return new NewAccount(loginId, name, department, birthDate);
+    }
+
+    /**
+     * 생년월일 검사 (선택 입력). 이용자 등록(ServiceUserService)과 같은 형식·문구를 쓴다.
+     *  - 비어 있으면 null (저장하지 않음)
+     *  - YYYY-MM-DD로 읽을 수 없거나 없는 날짜(2000-13-40)면 400
+     *  - 한국 날짜 기준 오늘보다 뒤이거나 1900년 이전이면 400
+     */
+    private static LocalDate parseBirthDate(String raw) {
+        String text = trimToEmpty(raw);
+        if (text.isEmpty()) {
+            return null;
+        }
+        LocalDate date;
+        try {
+            date = LocalDate.parse(text);                                // YYYY-MM-DD만 읽음
+        } catch (DateTimeParseException e) {
+            throw ApiException.badRequest("생년월일을 YYYY-MM-DD 형식으로 입력해 주세요.");
+        }
+        if (date.isAfter(LocalDate.now(KST))) {
+            throw ApiException.badRequest("생년월일이 오늘보다 뒤예요.");
+        }
+        if (date.isBefore(MIN_BIRTH_DATE)) {
+            throw ApiException.badRequest("생년월일을 다시 확인해 주세요.");
+        }
+        return date;
     }
 
     /** 비밀번호를 해시해서 계정 한 줄 추가 → 직원 번호 */
@@ -199,7 +231,7 @@ public class AuthService {
         String hash = passwordEncoder.encode(password);                // 원문은 저장하지 않는다
         try {
             return authRepository.insert(account.loginId(), hash, account.name(), account.department(),
-                    positionOf(role), role);
+                    positionOf(role), role, account.birthDate());
         } catch (DuplicateKeyException e) {
             // 두 사람이 같은 아이디로 동시에 가입을 눌러 위 확인을 둘 다 통과한 경우.
             // DB의 UNIQUE 제약이 막아 주는데, 공통 처리기는 이 예외를 일지 중복으로 보기 때문에
