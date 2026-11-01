@@ -99,6 +99,11 @@ public class Catalog {
         return data().items().get(kind);
     }
 
+    /** 목록을 다시 읽게 한다 (참여 활동을 추가·수정한 뒤 CategoryService가 부름) */
+    public void reload() {
+        data = null;                                            // 다음에 data()를 부를 때 DB에서 새로 읽음
+    }
+
     /** 응답에 넣을 화면 글자 */
     public String label(Kind kind, Item item) {
         return FRONT_LABEL.getOrDefault(kind.name() + ":" + item.code(), item.name());
