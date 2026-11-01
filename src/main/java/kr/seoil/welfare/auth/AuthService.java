@@ -119,6 +119,50 @@ public class AuthService {
         return CreatedStaffResponse.of(created, temporaryPassword);
     }
 
+    // ------------------------------------------------------------------
+    // 계정 사용 중지·다시 사용 (팀장·국장)
+    // ------------------------------------------------------------------
+
+    /**
+     * 직원 계정을 사용 중지(active = false)하거나 다시 사용(active = true)하게 한다
+     * (명세서 8.3, POST /api/staff/{id}/deactivate · /activate).
+     *
+     * 규칙은 계정 추가(createStaff)와 맞춘다.
+     *  - 팀장·국장만 할 수 있다
+     *  - 국장 계정은 국장만 바꿀 수 있다 (팀장이 윗사람 계정을 막지 못하게)
+     *  - 내 계정은 사용 중지할 수 없다 (실수로 관리할 사람이 없어지는 일 방지)
+     *  - 이미 그 상태여도 오류 없이 지금 정보를 돌려준다 (두 번 눌러도 안전)
+     * 사용 중지된 직원은 로그인(authenticate)과 내 정보(me)에서 403 ACCOUNT_DISABLED로 막힌다.
+     */
+    // 권한 검사 후 계정 정지·해제 (actorId = 요청한 사람, targetId = 바꿀 직원)
+// StaffController에서 deactivate는 active=false, activate는 active=true로 넘어옴
+    @Transactional
+    public StaffDto setStaffActive(long actorId, String targetId, boolean active) {
+        String actorRole = me(actorId).role();                         // 요청한 사람이 사용 중지 상태면 여기서 403
+        if (!STAFF_MANAGERS.contains(actorRole)) {
+            throw forbidden("계정 사용 중지는 팀장·국장만 할 수 있어요.");
+        }
+        long staffId = parseStaffId(targetId);                         // 숫자가 아니면 그런 직원은 없음 → 404
+        StaffDto target = staffQueries.findById(staffId).orElseThrow(AuthService::staffNotFound);
+        if ("director".equals(target.role()) && !"director".equals(actorRole)) {
+            throw forbidden("국장 계정은 국장만 바꿀 수 있어요.");
+        }
+        if (!active && staffId == actorId) {
+            throw ApiException.badRequest("내 계정은 사용 중지할 수 없어요.");
+        }
+        staffQueries.updateActive(staffId, active);
+        return staffQueries.findById(staffId).orElseThrow(AuthService::staffNotFound);   // 바뀐 정보로 응답
+    }
+
+    /** 주소의 직원 번호 → 숫자. 숫자가 아니면 그런 직원은 없는 것이므로 404 */
+    private static long parseStaffId(String id) {
+        try {
+            return Long.parseLong(id == null ? "" : id.trim());
+        } catch (NumberFormatException e) {
+            throw staffNotFound();
+        }
+    }
+
     /** 검사를 통과한 새 계정 정보 */
     private record NewAccount(String loginId, String name, String department) {
     }
@@ -282,6 +326,10 @@ public class AuthService {
 
     private static ApiException forbidden(String message) {
         return new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", message);
+    }
+
+    private static ApiException staffNotFound() {
+        return new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "찾을 수 없는 직원이에요.");
     }
 
     private static ApiException duplicateLoginId() {
