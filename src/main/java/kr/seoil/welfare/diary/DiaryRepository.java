@@ -42,8 +42,8 @@ public class DiaryRepository {
     public record NewPick(short itemId, String etcText) {
     }
 
-    /** 수정 전에 잠가서 읽는 일지 정보 */
-    public record LockedLog(String status, long clientId, LocalDate date) {
+    /** 수정 전에 잠가서 읽는 일지 정보 (createdBy = 처음 쓴 직원, 작성 중 일지 수정 권한 확인용) */
+    public record LockedLog(String status, long clientId, LocalDate date, long createdBy) {
     }
 
     /** log_history + 일지 요약 (오늘의 소식) */
@@ -119,10 +119,10 @@ public class DiaryRepository {
     /** 수정 전에 그 일지를 잠그고 읽기 (동시에 두 명이 저장해도 순서대로 처리되게). 없으면 null */
     public LockedLog lockLog(long logId) {
         List<LockedLog> rows = jdbc.query(
-                "SELECT status, client_id, log_date FROM daily_log WHERE log_id = :id FOR UPDATE",
+                "SELECT status, client_id, log_date, created_by FROM daily_log WHERE log_id = :id FOR UPDATE",
                 new MapSqlParameterSource("id", logId),
                 (rs, n) -> new LockedLog(rs.getString("status"), rs.getLong("client_id"),
-                        rs.getObject("log_date", LocalDate.class)));
+                        rs.getObject("log_date", LocalDate.class), rs.getLong("created_by")));
         return rows.isEmpty() ? null : rows.get(0);
     }
 

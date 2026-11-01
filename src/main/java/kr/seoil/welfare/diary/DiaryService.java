@@ -46,6 +46,8 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
  *  6. 활동 시간은 10:00~17:00, 30분 단위, 같은 일지 안에서 겹치지 않게 (명세서 8.5, 프론트 ACTIVITY_SLOTS와 같음)
  *     작성 완료로 저장할 때는 모든 활동에 시간이 있어야 한다
  *  7. 수정(PUT)은 불러올 때 받은 updatedAt을 함께 보낸다 — 그사이 다른 사람이 저장했으면 409 DIARY_UPDATED_BY_OTHER (명세서 4.6)
+ *  8. 작성 중(draft) 일지는 작성자만 수정할 수 있다 — 다른 직원이면 403 FORBIDDEN
+ *     작성 완료 일지는 누구나 수정할 수 있고 수정자가 기록된다 (프론트가 다른 직원의 작성 중 일지를 읽기만 하게 둔 것과 같음)
  */
 @Service
 public class DiaryService {
@@ -155,6 +157,7 @@ public class DiaryService {
         if (before == null) {
             throw ApiException.notFound("일지");
         }
+        checkDraftOwner(before, actorId);                           // 규칙 8
         DiaryResponse previous = get(diaryId);                      // 바뀐 내용이 있는지 비교용
         checkNotUpdatedByOther(req.updatedAt(), previous);          // 규칙 7
         // 저장된 일지의 이용자·날짜는 바꾸지 않는다 (명세서 9장 B-8)
@@ -187,6 +190,18 @@ public class DiaryService {
             repo.insertHistory(logId, wasCompleted ? "updated" : "created", actorId);
         }
         return saved;
+    }
+
+    /**
+     * 규칙 8: 작성 중 일지는 작성자만 고칠 수 있다.
+     * 작성 중 일지는 아직 쓰고 있는 사람의 것이라, 다른 직원이 덮어쓰면 그 사람이 쓰던 내용이 사라진다.
+     * 화면에서 버튼을 숨기는 것만으로는 막을 수 없어서 서버에서도 검사한다. (회의 확인 사항 — 팀장 허용 등은 여기만 바꾸면 됨)
+     */
+    private static void checkDraftOwner(LockedLog before, long actorId) {
+        if ("draft".equals(before.status()) && before.createdBy() != actorId) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN",
+                    "작성 중인 일지는 작성한 사람만 수정할 수 있어요.");
+        }
     }
 
     /**
