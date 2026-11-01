@@ -93,9 +93,9 @@ CREATE DATABASE welfare OWNER welfare;
 
 > 이미 실행된 `V1__init.sql`, `V2__dev_seed.sql`은 **고치지 마세요.** Flyway가 내용이 바뀐 걸 알아채고 서버를 멈춥니다.
 > 이미 main에 들어간 `V3`, `V4` 파일도 마찬가지로 고치지 않습니다.
-> 테이블을 바꿀 땐 **다음 번호**로 새 파일을 추가합니다. 지금 다음 번호는 `V5__설명.sql`입니다.
+> 테이블을 바꿀 땐 **다음 번호**로 새 파일을 추가합니다. 지금 다음 번호는 `V6__설명.sql`입니다.
 
-> `db/migration` 폴더에 `V1`, `V3`, `V4`만 있고 `V2`가 없는 건 **정상**입니다. `V2__dev_seed.sql`은 가상 데이터라 `db/dev` 폴더에 따로 있습니다.
+> `db/migration` 폴더에 `V1`, `V3`,만 있고 `V2`가 없는 건 **정상**입니다. `V2__dev_seed.sql`은 가상 데이터라 `db/dev` 폴더에 따로 있습니다.
 > 그래서 `V2` 번호는 이미 쓰인 번호이니 새 파일에 쓰지 마세요.
 
 ### 프론트와 붙이기
@@ -123,7 +123,7 @@ welfare-be/
     application.yml           공통 설정 (DB 주소는 환경변수에서)
     application-local.yml     내 컴퓨터용 설정 (가상 데이터 포함)
     db/migration/V1__init.sql 테이블 18개 + 선택 항목 목록
-    db/migration/V3, V4 …     테이블 변경 (V4: staff.birth_date 추가)
+    db/migration/V3, V4 …           db/migration/V3 ~ V5 …    테이블 변경 (V4: 알림 읽은 시각, V5: staff.birth_date)
     db/dev/V2__dev_seed.sql   개발용 가상 직원·이용자
   docs/                       기능명세서, ERD, 스키마
 ```
