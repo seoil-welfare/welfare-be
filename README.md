@@ -71,7 +71,8 @@ IntelliJ에서 `welfare-be` 폴더를 열고(Gradle 불러오기가 끝날 때�
 
 ### 가상 데이터
 
-`local` 프로필(기본값)로 실행하면 `src/main/resources/db/dev`의 가상 데이터가 함께 들어갑니다. 운영 서버는 이 폴더를 읽지 않습니다.
+`local` 프로필(기본값)로 실행하면 `src/main/resources/db/dev`의 가상 데이터가 함께 들어갑니다.
+운영 서버는 Docker 이미지가 항상 `prod` 프로필로 실행하므로 이 폴더를 읽지 않습니다. 배포 방법은 [`deploy/README.md`](deploy/README.md)를 보세요.
 
 | 파일 | 내용 |
 |---|---|
