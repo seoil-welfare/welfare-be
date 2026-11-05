@@ -9,6 +9,7 @@ public record CreateStaffRequest(
         String loginId,         // 로그인 아이디 (필수, 영문 소문자·숫자·. _ - 4~50자)
         String department,      // 부서 (비우면 '주간활동지원팀')
         String position,        // 무시 — role로 정한다
-        String role             // staff | teamLead | director
+        String role,            // staff | teamLead | director
+        String birthDate        // 생년월일 YYYY-MM-DD (선택)
 ) {
 }

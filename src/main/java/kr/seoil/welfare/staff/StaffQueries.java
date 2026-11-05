@@ -22,10 +22,11 @@ public class StaffQueries {                                     //Spring이 만�
             rs.getString("position"),
             rs.getString("role"),
             rs.getString("login_id"),
-            rs.getBoolean("is_active"));  // 사용중인지를 꺼내어 StaffDto의 active에 담는다
+            rs.getBoolean("is_active"),   // 사용중인지를 꺼내어 StaffDto의 active에 담는다
+            rs.getString("birth_date"));  // 생년월일을 꺼내어 StaffDto의 birthDate에 담는다 (DATE → "1995-03-14", 없으면 null)
 
-    private static final String COLUMNS = "staff_id, name, department, position, role, login_id, is_active";
-     //COLUMNS는 SELECT할 칸 목록
+    private static final String COLUMNS = "staff_id, name, department, position, role, login_id, is_active, birth_date";
+    //COLUMNS는 SELECT할 칸 목록
     private final JdbcTemplate jdbc;                            // SQL 실행 도구
 
     public StaffQueries(JdbcTemplate jdbc) {

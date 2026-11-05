@@ -1,5 +1,6 @@
 package kr.seoil.welfare.auth;
 
+import java.time.LocalDate;
 import java.util.Optional;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -57,14 +58,15 @@ public class AuthRepository {
     /**
      * 새 계정 한 줄 추가. 만들어진 직원 번호를 돌려준다.
      * RETURNING은 PostgreSQL 기능으로, INSERT와 번호 조회를 한 번에 한다.
+     * birthDate는 비어 있을 수 있다(null → DB에도 NULL).
      */
     public long insert(String loginId, String passwordHash, String name,
-                       String department, String position, String role) {
+                       String department, String position, String role, LocalDate birthDate) {
         Long staffId = jdbc.queryForObject("""
-                INSERT INTO staff (login_id, password_hash, name, department, position, role)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO staff (login_id, password_hash, name, department, position, role, birth_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 RETURNING staff_id
-                """, Long.class, loginId, passwordHash, name, department, position, role);
+                """, Long.class, loginId, passwordHash, name, department, position, role, birthDate);
         if (staffId == null) {                       // 정상 동작에서는 일어나지 않는다
             throw new IllegalStateException("계정을 추가했지만 staff_id를 받지 못했습니다.");
         }

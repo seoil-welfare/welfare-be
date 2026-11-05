@@ -44,6 +44,11 @@ copy .env.example .env      # 복사한 뒤 .env를 열어 DB_PASSWORD에 위 �
 
 `.env`는 `.gitignore`에 들어 있어서 GitHub에 올라가지 않습니다. **비밀번호를 코드나 application.yml에 직접 쓰지 마세요.**
 
+> **`.env`는 프로젝트 맨 위 폴더(이 README와 같은 폴더)에 만드세요.** `src`나 `staff` 같은 다른 폴더 안에 있으면 서버가 찾지 못해서
+> `PSQLException ... password authentication failed` 같은 DB 접속 오류가 납니다.
+
+> **`.env`는 컴퓨터마다 새로 만들어야 합니다.** GitHub에 올라가지 않으니 학교 노트북·집 컴퓨터처럼 새 컴퓨터에서 받으면 위 복사부터 다시 합니다.
+
 ### 서버 실행
 
 IntelliJ에서 `welfare-be` 폴더를 열고(Gradle 불러오기가 끝날 때까지 기다림) `WelfareApplication`의 ▶ 버튼을 누릅니다. 또는:
@@ -87,7 +92,11 @@ CREATE DATABASE welfare OWNER welfare;
 > 서버 로그에 `PostgreSQL 18 is newer than this version of Flyway` 경고가 보여도 정상입니다. 경고일 뿐 테이블은 만들어집니다.
 
 > 이미 실행된 `V1__init.sql`, `V2__dev_seed.sql`은 **고치지 마세요.** Flyway가 내용이 바뀐 걸 알아채고 서버를 멈춥니다.
-> 테이블을 바꿀 땐 `V3__설명.sql`처럼 새 파일을 추가합니다.
+> 이미 main에 들어간 `V3`, `V4` 파일도 마찬가지로 고치지 않습니다.
+> 테이블을 바꿀 땐 **다음 번호**로 새 파일을 추가합니다. 지금 다음 번호는 `V6__설명.sql`입니다.
+
+> `db/migration` 폴더에 `V1`, `V3`,만 있고 `V2`가 없는 건 **정상**입니다. `V2__dev_seed.sql`은 가상 데이터라 `db/dev` 폴더에 따로 있습니다.
+> 그래서 `V2` 번호는 이미 쓰인 번호이니 새 파일에 쓰지 마세요.
 
 ### 프론트와 붙이기
 
@@ -114,6 +123,7 @@ welfare-be/
     application.yml           공통 설정 (DB 주소는 환경변수에서)
     application-local.yml     내 컴퓨터용 설정 (가상 데이터 포함)
     db/migration/V1__init.sql 테이블 18개 + 선택 항목 목록
+    db/migration/V3, V4 …           db/migration/V3 ~ V5 …    테이블 변경 (V4: 알림 읽은 시각, V5: staff.birth_date)
     db/dev/V2__dev_seed.sql   개발용 가상 직원·이용자
   docs/                       기능명세서, ERD, 스키마
 ```
@@ -128,6 +138,8 @@ welfare-be/
 |---|---|---|
 | `feature/diary` | 재웅 | 일지 작성·조회 (`/api/diaries`) |
 | `feature/stats` | 재웅 | 통계 |
+| `feature/staff-deactivate` | 재웅 | 직원 계정 사용 중지·해제 |
+| `feature/staff-birth-date` | 재웅 | 직원 생년월일 (`feature/staff-deactivate` 위에서 작업, 그 다음에 병합) |
 | `feature/login` | 지민 | 로그인·세션 (`/api/auth`) |
 | `feature/notification` | 지민 | 알림 |
 | `feature/report` | 희정 | 보고서·파일 출력 |
@@ -149,7 +161,7 @@ welfare-be/
 
 | 메서드 · 경로 | 요청 | 응답 |
 |---|---|---|
-| `POST /api/auth/signup` | `{ loginId, password, name, department? }` | 201 Staff / 400 / 409 `DUPLICATE_LOGIN_ID` |
+| `POST /api/auth/signup` | `{ loginId, password, name, department?, birthDate? }` | 201 Staff / 400 / 409 `DUPLICATE_LOGIN_ID` |
 | `POST /api/auth/login` | `{ loginId, password, autoLogin? }` | 200 Staff / 400 / 401 `INVALID_CREDENTIALS` / 403 `ACCOUNT_DISABLED` |
 | `GET /api/auth/me` | - | 200 Staff / 401 `UNAUTHENTICATED` / 403 `ACCOUNT_DISABLED` |
 | `POST /api/auth/logout` | - | 204 (로그인 상태가 아니어도 204) |
@@ -263,13 +275,18 @@ AWS 비용 주의: 예산 알림 설정, NAT 게이트웨이 만들지 않기, �
 | `PUT` | `/service-users/:id` | 이용자 정보 수정 |
 | `POST` | `/service-users/:id/close` | 이용 종결 (삭제 아님) |
 | `GET` | `/staff` | 직원 목록 |
-| `POST` | `/staff` | 직원 계정 추가 |
-
+| `POST` | `/staff` | 직원 계정 추가 `{ loginId, name, department?, role, birthDate? }` |
+| `POST` | `/staff/:id/deactivate` | 직원 계정 사용 중지 (팀장·국장만) |
+| `POST` | `/staff/:id/activate` | 직원 계정 사용 다시 허용 (팀장·국장만) |
 | `GET` | `/stats/summary?userId=&unit=&year=&month=&quarter=&week=` | 통계 메인 화면 숫자 전부 (서버 집계, 아래 참고) |
 
 **통계 서버 집계** `GET /api/stats/summary`는 만들어 두었고, 프론트 계산(`statsService.ts`)과 같은 결과가 나오는 것을 가상 일지로 비교 검증했습니다(이용자 3명 × 기간 7개, 11개 항목 전부 일치). 지금 프론트 통계 화면은 `GET /diaries`로 일지를 받아 직접 계산하므로, 프론트 `useStatsDiaries`를 이 API로 바꾸는 건 별도 작업입니다.
 
-**제안 API**(프론트 수정 필요): `GET /categories`(선택 항목 코드 목록), `/stats/behaviors` · `/stats/activities` · `/stats/categories/:category`(서버 통계 집계), `POST /staff/:id/deactivate` · `/activate`(직원 사용 중지). 요청·응답은 기능명세서 5장에 있습니다.
+**직원 응답(Staff)** 에는 `active`(사용 중이면 `true`)와 `birthDate`(`YYYY-MM-DD`)가 들어갑니다. 생년월일이 없으면 `birthDate`는 응답에서 빠집니다.
+
+**생년월일 `birthDate`** 는 회원가입·계정 추가 둘 다 선택 항목입니다. 비워 두면 저장하지 않고, 형식이 `YYYY-MM-DD`가 아니거나 오늘(한국 시간)보다 뒤이거나 1900년보다 앞이면 `400`입니다.
+
+**제안 API**(프론트 수정 필요): `GET /categories`(선택 항목 코드 목록), `/stats/behaviors` · `/stats/activities` · `/stats/categories/:category`(서버 통계 집계). 요청·응답은 기능명세서 5장에 있습니다.
 
 ### 에러 코드
 
@@ -311,6 +328,9 @@ AWS 비용 주의: 예산 알림 설정, NAT 게이트웨이 만들지 않기, �
 - **활동은 통째로 교체.** 일지 저장 때 기존 활동을 지우고 받은 배열로 다시 넣습니다(하위 선택 항목은 `ON DELETE CASCADE`).
 - **통계는 작성 완료 일지만** 셉니다. 단위는 `건`, 도전적 행동은 세부 항목 선택 건수, 발생 일수는 날짜 기준입니다.
 - **삭제하지 않습니다.** 이용자는 종결(`closed`), 직원은 사용 중지(`is_active = false`)로 처리해 과거 일지의 이름이 남도록 합니다.
+- **직원 사용 중지·해제는 팀장·국장만** 할 수 있습니다. 국장 계정은 국장만 바꿀 수 있고, 자기 자신은 사용 중지할 수 없습니다(`400`).
+- **사용 중지되면 로그인 중이어도 바로 막힙니다.** 다음 요청에서 `403 ACCOUNT_DISABLED`를 돌려주고 세션을 끊습니다(`auth/ActiveStaffInterceptor`). `/api/auth/**`, `/api/health`는 이 검사를 하지 않습니다.
+- **회원가입은 권한(`role`)을 받지 않습니다.** 프론트가 보내도 무시하고 항상 `staff`로 만듭니다. 팀장·국장 계정은 `POST /staff`로만 만들 수 있고, 국장 계정은 국장만 만들 수 있습니다.
 
 ---
 
@@ -359,6 +379,6 @@ PostgreSQL 테이블 18개입니다. 실제 PostgreSQL에서 생성과 제약조
 2. 로그인·세션 (`/auth/*`)
 3. ~~일지 저장·조회 (`/diaries`) — 하루 1건, 상태 전이, 이력 기록~~ ✅ `feature/diary`
 4. ~~통계 서버 집계 `/stats/summary`~~ ✅ `feature/diary` — `/stats/behaviors`, `/stats/activities`는 다음 단계
-5. 이용자·직원 (`/service-users`, `/staff`) — 지금은 목록 조회(GET)만 있음
+5. 이용자·직원 (`/service-users`, `/staff`) — 직원 사용 중지·해제 ✅ `feature/staff-deactivate`, 직원 생년월일 ✅ `feature/staff-birth-date` / 이용자 API는 다음 단계
 6. 프론트 `.env.local`에 `VITE_API_MODE=http`로 붙여서 확인
 7. AWS 배포 (EC2 + RDS + S3/CloudFront)

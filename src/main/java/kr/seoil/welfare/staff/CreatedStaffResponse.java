@@ -13,11 +13,12 @@ public record CreatedStaffResponse(
         String position,
         String role,
         String loginId,
+        String birthDate,           // 생년월일 (없으면 응답에서 빠짐)
         String temporaryPassword    // 새 계정의 임시 비밀번호 (첫 로그인 후 비밀번호 변경 권장)
 ) {
 
     public static CreatedStaffResponse of(StaffDto staff, String temporaryPassword) {
         return new CreatedStaffResponse(staff.id(), staff.name(), staff.department(), staff.position(),
-                staff.role(), staff.loginId(), temporaryPassword);
+                staff.role(), staff.loginId(), staff.birthDate(), temporaryPassword);
     }
 }
