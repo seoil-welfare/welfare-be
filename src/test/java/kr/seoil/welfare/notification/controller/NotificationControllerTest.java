@@ -1,11 +1,15 @@
 package kr.seoil.welfare.notification.controller;
 
+import kr.seoil.welfare.auth.AuthRepository;
 import kr.seoil.welfare.auth.SessionStaff;
 import kr.seoil.welfare.common.ApiException;
 import kr.seoil.welfare.common.GlobalExceptionHandler;
 import kr.seoil.welfare.notification.dto.NotificationSettingsDto;
 import kr.seoil.welfare.notification.dto.NotificationSummaryResponse;
 import kr.seoil.welfare.notification.service.NotificationService;
+import java.util.Optional;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +21,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
@@ -39,6 +44,15 @@ class NotificationControllerTest {
 
     @MockitoBean
     private NotificationService notificationService;
+
+    @MockitoBean   // ActiveStaffInterceptor가 요청마다 계정 상태를 본다
+    private AuthRepository authRepository;
+
+    @BeforeEach
+    void activeAccount() {
+        given(authRepository.findById(anyLong()))
+                .willAnswer(inv -> Optional.of(new AuthRepository.Account(inv.getArgument(0), "hash", true)));
+    }
 
     private static MockHttpSession loggedIn(long staffId) {
         MockHttpSession session = new MockHttpSession();
