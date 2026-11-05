@@ -1,6 +1,7 @@
 package kr.seoil.welfare.calendar;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -21,11 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
  *  - 종결된 이용자의 일지는 세지 않는다
  *  - 일지가 하나도 없는 날은 응답에서 뺀다
  *  - 새 일지는 그날 일지가 없는 이용자만 쓸 수 있다 (이용자 1명당 하루 1건)
+ *  - 오늘(한국 날짜)보다 뒤인 날에는 새 일지를 쓸 수 없다 (canCreate = false)
  */
 @Service                                // 서버가 켜질 때 Spring이 이 객체를 하나 만들어 Controller에 넣어 줌
 public class CalendarService {
 
     static final int MAX_DAYS = 42;     // 한 번에 조회할 수 있는 최대 날짜 수 (달력 6주)
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");     // '오늘'은 한국 날짜 기준
 
     // DB 조회를 맡는 객체. Spring이 생성자로 넣어 준다
     private final CalendarRepository calendarRepository;
@@ -66,7 +69,10 @@ public class CalendarService {
      */
     @Transactional(readOnly = true)
     public List<CalendarClientStatus> clientStatuses(String date) {
-        return calendarRepository.findClientStatuses(parseDate(date)).stream()
+        LocalDate day = parseDate(date);
+        // 아직 오지 않은 날에는 아무도 새 일지를 쓸 수 없다 (DiaryService 규칙 9와 같음, 오늘은 허용)
+        boolean future = day.isAfter(LocalDate.now(KST));
+        return calendarRepository.findClientStatuses(day).stream()
                 .map(r -> {
                     boolean hasLog = r.logId() != null;         // 그날 일지가 있는지
                     return new CalendarClientStatus(
@@ -76,7 +82,7 @@ public class CalendarService {
                             hasLog ? String.valueOf(r.logId()) : null,
                             hasLog ? String.valueOf(r.authorId()) : null,
                             r.behaviorCount(),
-                            !hasLog);                           // 하루 1건이라 일지가 없을 때만 새로 쓸 수 있음
+                            !hasLog && !future);                // 하루 1건 + 미래 날짜 금지: 둘 다 통과해야 새로 쓸 수 있음
                 })
                 .toList();
     }
