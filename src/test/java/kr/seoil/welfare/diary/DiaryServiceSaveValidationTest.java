@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 
+import kr.seoil.welfare.auth.AuthService;
 import kr.seoil.welfare.common.ApiException;
 import kr.seoil.welfare.diary.Catalog.Item;
 import kr.seoil.welfare.diary.dto.ActivityDto;
@@ -50,7 +51,7 @@ class DiaryServiceSaveValidationTest {
             return new Catalog.BehaviorItem((short) 1, code, area, false, 1);
         });
         Clock fixed = Clock.fixed(TODAY.atTime(12, 0).atZone(KST).toInstant(), KST);   // 오늘 = 2026-11-06 (한국 시간)
-        service = new DiaryService(repo, catalog, fixed);
+        service = new DiaryService(repo, catalog, mock(AuthService.class), fixed);
         when(repo.clientExists(anyLong())).thenReturn(false);
     }
 

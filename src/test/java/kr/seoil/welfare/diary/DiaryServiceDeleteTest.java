@@ -8,7 +8,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 
 import kr.seoil.welfare.auth.AuthService;
 import kr.seoil.welfare.common.ApiException;
@@ -33,7 +35,7 @@ class DiaryServiceDeleteTest {
     void setUp() {
         repo = mock(DiaryRepository.class);
         authService = mock(AuthService.class);
-        service = new DiaryService(repo, mock(Catalog.class), authService);
+        service = new DiaryService(repo, mock(Catalog.class), authService, Clock.system(ZoneId.of("Asia/Seoul")));
     }
 
     private void givenLog(String status) {
