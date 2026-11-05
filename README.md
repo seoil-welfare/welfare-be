@@ -155,13 +155,12 @@ welfare-be/
 - 비밀번호는 BCrypt 해시로만 저장합니다 (`staff.password_hash`). 원문은 어디에도 남기지 않습니다
 - 가상 데이터(`db/dev/V2__dev_seed.sql`)의 데모 계정 5개는 그대로 쓸 수 있습니다. 비밀번호는 전부 `demo1234`
   (`demo.staff1~3`, `demo.lead`, `demo.director` — 해시가 실제 BCrypt라서 진짜 로그인으로도 들어갑니다)
-- 회원가입은 항상 `role = staff`, `position = 사회복지사`로 만들어집니다. 로그인 전 화면이라 권한을 직접 고르게 두면
-  누구나 팀장·국장으로 가입할 수 있기 때문입니다. 팀장·국장은 담당자 관리(SF-02)가 생길 때까지 DB에서 올립니다:
-  `UPDATE staff SET role = 'teamLead', position = '팀장' WHERE login_id = '...';`
+- **회원가입은 없습니다.** 계정은 팀장·국장이 `POST /api/staff`(계정 추가)로 만들고, 응답의 임시 비밀번호를 본인에게 전달합니다.
+  계정 추가는 항상 `role = staff`입니다. 팀장은 역할 변경, 국장은 관리 권한 이양으로만 바뀝니다.
+  운영 DB의 첫 국장 계정만 DB에서 직접 넣습니다.
 
 | 메서드 · 경로 | 요청 | 응답 |
 |---|---|---|
-| `POST /api/auth/signup` | `{ loginId, password, name, department?, birthDate? }` | 201 Staff / 400 / 409 `DUPLICATE_LOGIN_ID` |
 | `POST /api/auth/login` | `{ loginId, password, autoLogin? }` | 200 Staff / 400 / 401 `INVALID_CREDENTIALS` / 403 `ACCOUNT_DISABLED` |
 | `GET /api/auth/me` | - | 200 Staff / 401 `UNAUTHENTICATED` / 403 `ACCOUNT_DISABLED` |
 | `POST /api/auth/logout` | - | 204 (로그인 상태가 아니어도 204) |
@@ -284,7 +283,7 @@ AWS 비용 주의: 예산 알림 설정, NAT 게이트웨이 만들지 않기, �
 
 **직원 응답(Staff)** 에는 `active`(사용 중이면 `true`)와 `birthDate`(`YYYY-MM-DD`)가 들어갑니다. 생년월일이 없으면 `birthDate`는 응답에서 빠집니다.
 
-**생년월일 `birthDate`** 는 회원가입·계정 추가 둘 다 선택 항목입니다. 비워 두면 저장하지 않고, 형식이 `YYYY-MM-DD`가 아니거나 오늘(한국 시간)보다 뒤이거나 1900년보다 앞이면 `400`입니다.
+**생년월일 `birthDate`** 는 계정 추가에서 선택 항목입니다. 비워 두면 저장하지 않고, 형식이 `YYYY-MM-DD`가 아니거나 오늘(한국 시간)보다 뒤이거나 1900년보다 앞이면 `400`입니다.
 
 **제안 API**(프론트 수정 필요): `GET /categories`(선택 항목 코드 목록), `/stats/behaviors` · `/stats/activities` · `/stats/categories/:category`(서버 통계 집계). 요청·응답은 기능명세서 5장에 있습니다.
 
@@ -330,7 +329,7 @@ AWS 비용 주의: 예산 알림 설정, NAT 게이트웨이 만들지 않기, �
 - **삭제하지 않습니다.** 이용자는 종결(`closed`), 직원은 사용 중지(`is_active = false`)로 처리해 과거 일지의 이름이 남도록 합니다.
 - **직원 사용 중지·해제는 팀장·국장만** 할 수 있습니다. 국장 계정은 국장만 바꿀 수 있고, 자기 자신은 사용 중지할 수 없습니다(`400`).
 - **사용 중지되면 로그인 중이어도 바로 막힙니다.** 다음 요청에서 `403 ACCOUNT_DISABLED`를 돌려주고 세션을 끊습니다(`auth/ActiveStaffInterceptor`). `/api/auth/**`, `/api/health`는 이 검사를 하지 않습니다.
-- **회원가입은 권한(`role`)을 받지 않습니다.** 프론트가 보내도 무시하고 항상 `staff`로 만듭니다. 팀장·국장 계정은 `POST /staff`로만 만들 수 있고, 국장 계정은 국장만 만들 수 있습니다.
+- **회원가입은 없습니다.** 계정 추가(`POST /staff`)는 팀장·국장만, 항상 `staff`로 만듭니다(`role`이 `staff`가 아니면 `400`).
 
 ---
 

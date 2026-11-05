@@ -89,33 +89,6 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/auth/signup — 성공하면 201과 만들어진 직원 정보")
-    void signupReturnsCreated() throws Exception {
-        given(authService.signup(any())).willReturn(1L);
-        given(authService.me(1L)).willReturn(DEMO);
-
-        mvc.perform(post("/api/auth/signup")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"loginId\":\"demo.staff1\",\"password\":\"welfare2026\",\"name\":\"가 담당\"}"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.loginId").value("demo.staff1"));
-    }
-
-    @Test
-    @DisplayName("POST /api/auth/signup — 아이디가 겹치면 409 DUPLICATE_LOGIN_ID")
-    void signupDuplicateReturnsConflict() throws Exception {
-        willThrow(new ApiException(org.springframework.http.HttpStatus.CONFLICT,
-                "DUPLICATE_LOGIN_ID", "이미 사용 중인 아이디예요."))
-                .given(authService).signup(any());
-
-        mvc.perform(post("/api/auth/signup")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"loginId\":\"demo.staff1\",\"password\":\"welfare2026\",\"name\":\"가 담당\"}"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("DUPLICATE_LOGIN_ID"));
-    }
-
-    @Test
     @DisplayName("GET /api/auth/me — 로그인 안 했으면 401 UNAUTHENTICATED")
     void meWithoutSessionIsUnauthorized() throws Exception {
         mvc.perform(get("/api/auth/me"))

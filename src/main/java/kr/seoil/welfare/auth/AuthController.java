@@ -4,24 +4,20 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import kr.seoil.welfare.auth.dto.ChangePasswordRequest;
 import kr.seoil.welfare.auth.dto.LoginRequest;
-import kr.seoil.welfare.auth.dto.SignupRequest;
 import kr.seoil.welfare.common.ApiException;
 import kr.seoil.welfare.staff.StaffDto;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.SessionAttribute;
 
 /**
- * 로그인·회원가입 API의 입구 (명세서 3.1 LG, 3.18 SE / API 4.3).
+ * 로그인 API의 입구 (명세서 3.1 LG, 3.18 SE / API 4.3).
  *
- *  POST /api/auth/signup     회원가입 (가입만 하고 로그인은 따로)
  *  POST /api/auth/login      로그인 — 성공하면 세션 쿠키가 만들어진다
  *  GET  /api/auth/me         로그인한 직원 정보 (안 했으면 401)
  *  POST /api/auth/logout     로그아웃 (세션 삭제)
@@ -32,6 +28,7 @@ import org.springframework.web.bind.annotation.SessionAttribute;
  * @SessionAttribute 로 그 값을 꺼내 쓴다. 프론트는 모든 요청에 credentials: include 로 쿠키를 보낸다.
  *
  * 규칙 판단(비밀번호 비교, 중복 확인 등)은 AuthService가 한다. 여기서는 세션만 다룬다.
+ * 회원가입은 없다. 계정은 팀장·국장이 계정 추가(POST /api/staff)로 만든다.
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -55,19 +52,6 @@ public class AuthController {
 
     public AuthController(AuthService authService) {
         this.authService = authService;
-    }
-
-    /**
-     * POST /api/auth/signup — 회원가입
-     * 성공하면 201과 만들어진 직원 정보를 돌려준다. 로그인은 되지 않으므로
-     * 프론트는 가입 성공 후 로그인 화면으로 보내거나 받은 아이디로 바로 로그인을 호출한다.
-     * 아이디가 겹치면 409 DUPLICATE_LOGIN_ID, 비밀번호 규칙 위반이면 400 PASSWORD_POLICY.
-     */
-    @PostMapping("/signup")
-    @ResponseStatus(HttpStatus.CREATED)
-    public StaffDto signup(@RequestBody(required = false) SignupRequest body) {
-        long staffId = authService.signup(body);
-        return authService.me(staffId);
     }
 
     /**
