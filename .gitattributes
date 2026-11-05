@@ -1,2 +1,5 @@
 # git hook은 sh 스크립트라 Windows에서도 LF로 받아야 첫 줄(#!/bin/sh)이 깨지지 않는다
 .githooks/* text eol=lf
+# gradlew·nginx 설정은 리눅스(Docker)에서 쓰므로 LF로 받는다
+gradlew text eol=lf
+deploy/** text eol=lf

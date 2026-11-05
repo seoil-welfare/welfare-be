@@ -1,0 +1,40 @@
+# nginx 설정 틀. ${API_DOMAIN}은 컨테이너가 켜질 때 deploy/.env.prod 값으로 바뀐다
+# (nginx 공식 이미지의 templates 기능. $host 같은 nginx 변수는 그대로 남는다)
+
+# 80: 인증서 발급·갱신 확인용 경로만 열고 나머지는 HTTPS로 보낸다
+server {
+    listen 80;
+    server_name ${API_DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# 443: Vercel이 넘겨 준 /api 요청을 Spring Boot로 전달한다
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${API_DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${API_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${API_DOMAIN}/privkey.pem;
+
+    client_max_body_size 5m;
+
+    location /api/ {
+        proxy_pass http://app:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # API 말고는 아무것도 열지 않는다
+    location / {
+        return 404;
+    }
+}

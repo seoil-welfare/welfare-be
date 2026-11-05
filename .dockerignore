@@ -1,0 +1,12 @@
+# 이미지에 넣지 않을 것 (특히 비밀번호가 든 .env)
+.env
+.env.*
+!.env.example
+build/
+.gradle/
+.idea/
+.vscode/
+out/
+deploy/
+docs/
+*.md
