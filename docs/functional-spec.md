@@ -2,7 +2,7 @@
 
 원광장애인종합복지관 일지 관리 앱 · 프론트·백엔드 구현 기준 · 2026. 11. 4.
 
-> 기능 118개 — 구현 111 · 부분 구현 1 · 미구현 3 · 시연용 3
+> 기능 120개 — 구현 113 · 부분 구현 1 · 미구현 3 · 시연용 3
 
 ## 목차
 
@@ -37,7 +37,7 @@
 | v0.1 | 개발계획서 기준으로 화면 14개, 기능 95개 정리 |
 | v0.2 | 기준을 프론트 구현(welfare-fe)으로 변경. 기능마다 서버 처리·API 열 추가, 프론트에서 생긴 화면 6개와 신규 기능 추가 |
 | v0.3 | 리뷰 반영. 공통 에러 코드 표(4.2), 일지 상태 전이 규칙(4.5), 동시 수정 규칙(4.6), 제안 API 장 신설(5장: 선택 항목 코드화, 통계 서버 집계, 직원 사용 중지), 운영 정책 장 신설(8장: 권한 기준안, 직원 사용 중지, 임시저장, 활동 시간), 관련 기능 행 수정(LG-01, JW-08~10, AC-02, JD-07, JT-06~07, MY-08~09, SF-01, SF-03 신규) |
-| v0.4 | 백엔드 구현과 프론트 연결 상태 반영(fe PR #10~#21, be PR #1~#10. #7은 main에 빠져 #10으로 다시 들어감). 기준을 mock이 아닌 실제 서버 연결로 바꿈. 화면 2개(SU 회원가입, PA 참여 활동 관리)와 기능 8개 추가(LG-05→SU-01, JD-11, MY-14, PA-01~03, EX-03~04). 4.3 엔드포인트를 실제 백엔드 29개로 갱신, 5장을 '추가 API'(구현됨)로 바꿈, 6·7·8·9장 현재 상태 갱신 |
+| v0.4 | 백엔드 구현과 프론트 연결 상태 반영(fe PR #10~#21, be PR #1~#11. #7은 main에 빠져 #10으로 다시 들어감). 기준을 mock이 아닌 실제 서버 연결로 바꿈. 화면 2개(SU 회원가입, PA 참여 활동 관리)와 기능 10개 추가(LG-05→SU-01, JD-11, MY-14, PA-01~03, EX-03~04, SF-04~05). 4.3 엔드포인트를 실제 백엔드 31개로 갱신, 5장을 '추가 API'(구현됨)로 바꿈, 6·7·8·9장 현재 상태 갱신 |
 
 기능 ID는 v0.1부터 같은 번호를 이어 쓴다. 번호 체계(FR 통일 / 약어 통일)는 팀에서 확정 후 맞춘다.
 
@@ -84,11 +84,11 @@ v0.3 때 그린 지도라 회원가입(SU)과 참여 활동 관리(PA)는 들어
 | MY | 마이페이지 | 마이페이지 | /mypage | 11 | 11 | 0 | 0 | 0 |
 | US | 이용자 목록·등록 | 마이페이지 | /users, /users/new | 2 | 2 | 0 | 0 | 0 |
 | CU | 이용자 정보 | 마이페이지 | /users/:id | 8 | 8 | 0 | 0 | 0 |
-| SF | 담당자 목록·계정 추가 | 마이페이지 | /staff, /staff/new | 3 | 2 | 1 | 0 | 0 |
+| SF | 담당자 목록·계정 추가 | 마이페이지 | /staff, /staff/new | 5 | 4 | 1 | 0 | 0 |
 | PA | 참여 활동 관리 | 마이페이지 | /settings/participation | 3 | 3 | 0 | 0 | 0 |
 | SE | 내 정보·비밀번호 변경 | 마이페이지 | /profile, /settings/password | 2 | 2 | 0 | 0 | 0 |
 | EX | 파일 출력 | 마이페이지 | /exports/:kind | 4 | 3 | 0 | 1 | 0 |
-| 합계 |  |  |  | 118 | 111 | 1 | 3 | 3 |
+| 합계 |  |  |  | 120 | 113 | 1 | 3 | 3 |
 
 기능 수는 행 기준이다(MY-05~07처럼 묶은 행은 1개로 셈). 경로는 프론트 개발용 라우팅이며 공식 요구사항은 아니다.
 
@@ -292,8 +292,10 @@ v0.3 때 그린 지도라 회원가입(SU)과 참여 활동 관리(PA)는 들어
 | 기능 | 화면 동작 (프론트) | 서버 처리 (백엔드) | API · 데이터 | 상태 |
 | --- | --- | --- | --- | --- |
 | **SF-01** 담당자 목록<br><sub>기획서 FR-80</sub> | 이름, 부서·아이디, 팀장 배지. 사용 중지된 계정은 '사용 중지' 배지와 인원 수를 함께 표시. | 사용 중지된 직원도 포함해 돌려준다(과거 일지의 작성자 이름 표시용). 응답에 active 포함. 아이디(loginId)를 누구에게 보여 줄지는 결정 필요. | GET /staff<br>*staff* | 구현 |
-| **SF-02** 계정 추가<br><sub>기획서 FR-81</sub> | 이름·아이디·부서(기본 '주간활동지원팀')·역할 입력. 직위는 역할에서 정해진다. 비밀번호 입력란은 없다. 아이디 중복이면 입력란에 바로 오류. | 팀장·국장만(국장 계정은 국장만 만듦). 아이디 중복 409(DUPLICATE_LOGIN_ID). 12자 임시 비밀번호를 만들어 응답에 한 번만 담는다(DB에는 해시만). | POST /staff<br>*staff* | 부분 구현<br>임시 비밀번호를 화면에 안 보여 줌(논의 중) |
+| **SF-02** 계정 추가<br><sub>기획서 FR-81</sub> | 이름·아이디·부서(기본 '주간활동지원팀') 입력. 담당자로만 만든다. 비밀번호 입력란은 없다. 아이디 중복이면 입력란에 바로 오류. | 팀장·국장만. role은 비우거나 staff만 받고 그 밖의 값은 400(팀장은 SF-04, 국장은 SF-05로만). 아이디 중복 409(DUPLICATE_LOGIN_ID). 12자 임시 비밀번호를 만들어 응답에 한 번만 담는다(DB에는 해시만). | POST /staff<br>*staff* | 부분 구현<br>임시 비밀번호를 화면에 안 보여 줌(논의 중) |
 | **SF-03** 계정 사용 중지 · 재개<br><sub>기획서 신규</sub> | 목록의 각 행에 '사용 중지' / '다시 사용' 버튼과 확인 창. 내 계정에는 버튼이 없다. | 팀장·국장만, 국장 계정은 국장만, 내 계정은 중지 불가(400). 사용 중지하면 로그인 거부(403 ACCOUNT_DISABLED)하고 이미 로그인된 기기도 다음 요청부터 막는다. 일지·작성자·담당 배정은 지우지 않는다(8.3). | POST /staff/:id/deactivate<br>POST /staff/:id/activate<br>*staff.is_active* | 구현 |
+| **SF-04** 역할 변경<br><sub>기획서 신규</sub> | 담당자를 팀장으로 올리거나 팀장을 담당자로 내린다. 국장 계정·내 계정·사용 중지 계정에는 버튼이 없다. 오류는 message를 토스트로 보여 준다. | 팀장·국장만(403). 국장 계정 대상 403, 내 계정·사용 중지 계정 400, role이 staff·teamLead가 아니면 400(director 포함). 이미 그 역할이면 그대로 200. position도 함께 바꾼다(팀장 / 사회복지사). | POST /staff/:id/role<br>*staff.role, position* | 구현(be PR #11 검토 중) |
+| **SF-05** 관리 권한 이양<br><sub>기획서 신규</sub> | 국장만 보인다. 받을 사람을 고르고, 팝업에서 내 계정을 '팀장으로 남기' 또는 '계정 사용 중지'로 고른다. 사용 중지를 고르면 로그인 화면으로 간다. | 국장만(403). 국장은 항상 1명. 받는 사람은 사용 중인 다른 계정(400). 한 트랜잭션에서 요청한 국장 줄을 잠그고, 원래 국장을 먼저 팀장으로 내린 뒤 대상을 국장으로 올린다. deactivate면 원래 국장을 사용 중지하고 그 세션을 끊는다. | POST /staff/:id/transfer-director<br>*staff.role, is_active* | 구현(be PR #11 검토 중) |
 
 ### 3.19. 참여 활동 관리 (PA)  —  /settings/participation
 
@@ -386,9 +388,11 @@ message는 화면에 그대로 표시되므로 사용자가 이해할 수 있는
 | PUT /service-users/:id | (같음) | ServiceUser / 404 | id 유지 | CU-05 |
 | POST /service-users/:id/close | - | ServiceUser | status를 closed로. 삭제 아님 | CU-06 |
 | GET /staff | - | Staff[] | 사용 중지 직원 포함, active 포함 | SF-01 |
-| POST /staff | { name, loginId, department, role, birthDate? } | Staff + temporaryPassword / 403 / 409 | 팀장·국장만, 국장 계정은 국장만. 아이디 중복 DUPLICATE_LOGIN_ID | SF-02 |
+| POST /staff | { name, loginId, department, role?, birthDate? } | Staff + temporaryPassword / 400 / 403 / 409 | 팀장·국장만. role은 비우거나 staff만(그 밖은 400). 아이디 중복 DUPLICATE_LOGIN_ID | SF-02 |
 | POST /staff/:id/deactivate | - | Staff (active: false) | 5.3 | SF-03 |
 | POST /staff/:id/activate | - | Staff (active: true) | 5.3 | SF-03 |
+| POST /staff/:id/role | { role: staff \| teamLead } | Staff / 400 / 403 / 404 | 5.4 | SF-04 |
+| POST /staff/:id/transfer-director | { previousRole?: teamLead \| deactivate } | { director: Staff, previous: Staff } / 400 / 403 / 404 | 5.4 | SF-05 |
 | GET /categories | - | Categories (5.1) | 숨긴 항목 포함 | JW, AC, BH, PA |
 | POST /categories/participation | { label } | CategoryItem (201) / 400 / 403 / 409 | 5.1 | PA-02 |
 | PUT /categories/participation/:code | { label?, active? } | CategoryItem / 400 / 403 / 404 / 409 | 5.1 | PA-03 |
@@ -435,7 +439,7 @@ message는 화면에 그대로 표시되므로 사용자가 이해할 수 있는
 
 ## 5. 추가 API
 
-v0.3에서 '제안 API'로 적었던 것이다. 셋 다 구현되어 프론트에 연결됐다. 남은 일은 5.1의 저장 값 코드 전환뿐이다.
+5.1~5.3은 v0.3에서 '제안 API'로 적었던 것이다. 셋 다 구현되어 프론트에 연결됐다. 남은 일은 5.1의 저장 값 코드 전환뿐이다. 5.4는 v0.4에서 새로 정했다.
 
 ### 5.1. 선택 항목 (B-4)
 
@@ -504,6 +508,19 @@ v0.3에서 '제안 API'로 적었던 것이다. 셋 다 구현되어 프론트�
 | POST /staff/:id/deactivate | Staff (active: false) | is_active = false. 팀장·국장만, 국장 계정은 국장만, 내 계정은 400. 사용 중지된 계정은 로그인과 이후 요청이 403 ACCOUNT_DISABLED. 일지·작성자 기록·담당 배정은 그대로 |
 | POST /staff/:id/activate | Staff (active: true) | 다시 로그인할 수 있게 한다 |
 
+### 5.4. 직원 역할 변경 · 관리 권한 이양 (SF-04, SF-05)
+
+**구현됨(be PR #11 검토 중).** 역할은 국장(director) > 팀장(teamLead) > 담당자(staff)이고 국장은 항상 1명이다. 오류는 4.2 형식이며 새 code는 없다(400 VALIDATION_ERROR, 403 FORBIDDEN, 404 NOT_FOUND). message는 화면에 그대로 띄우는 문장이다.
+
+| 메서드 · 경로 | 응답 | 서버 규칙 |
+| --- | --- | --- |
+| POST /staff/:id/role { role } | Staff (role·position 바뀐 뒤) | 팀장·국장만(403 "역할 변경은 팀장·국장만 할 수 있어요."). 국장 계정 대상 403. 내 계정(국장 본인 포함)·사용 중지 계정 400. role은 staff·teamLead만(director·빈 값·대소문자 다름 400). 없는 직원·숫자 아닌 id 404. 이미 그 역할이면 바꾸지 않고 200 |
+| POST /staff/:id/transfer-director { previousRole? } | { director, previous } | 국장만(403 "관리 권한 이양은 국장만 할 수 있어요."). :id는 받을 사람, 사용 중인 다른 계정만(400). previousRole은 teamLead(기본) · deactivate, 그 밖은 400. previous는 role teamLead, position 팀장. deactivate면 previous.active false이고 요청 세션을 끊는다(응답은 200) |
+
+- 이양은 한 트랜잭션이다. 요청한 국장 줄을 SELECT ... FOR UPDATE로 잠근 뒤 국장인지 다시 확인하므로, 동시에 두 번 눌러도 두 번째는 403이다.
+- 원래 국장을 먼저 내리고 대상을 올린다. DB는 V6의 부분 유일 인덱스(staff_single_director)로 국장 1명을 보장한다.
+- 국장 계정은 사용 중지 API로는 막히지 않는다(국장 계정은 국장만 바꿀 수 있고 내 계정은 중지 불가). 이양의 deactivate로만 중지된다.
+
 ## 6. 프론트와 결정 사항이 다른 부분
 
 프론트는 복지관 답변지(9. 21.)가 반영되기 전 기준으로 만들어졌다. v0.3에서 정리한 차이와 지금 상태다.
@@ -529,7 +546,7 @@ v0.3에서 '제안 API'로 적었던 것이다. 셋 다 구현되어 프론트�
 
 | 프론트 타입 (types/index.ts) | DB 테이블 | 반영 상태 |
 | --- | --- | --- |
-| Staff | staff | **반영됨(V1).** department, role(staff · teamLead · director), is_active(응답은 active), notify_new_log. birth_date DATE(V5, 응답은 birthDate) |
+| Staff | staff | **반영됨(V1).** department, role(staff · teamLead · director), is_active(응답은 active), notify_new_log. birth_date DATE(V5, 응답은 birthDate). 국장 1명 부분 유일 인덱스(V6) |
 | ServiceUser | client | **반영됨(V1).** staff_id(담당 직원), status(active · closed) + closed_at, birth_date DATE |
 | Diary | daily_log | **반영됨(V1).** status(draft · completed). 동시 수정 비교에 updated_at 사용. 활동 시간은 작성 중일 때 비어도 됨(V3) |
 | Activity | activity_record | 맞음 (start_time, end_time, content, has_behavior) |
@@ -551,7 +568,9 @@ v0.3에서 '제안 API'로 적었던 것이다. 셋 다 구현되어 프론트�
 | 작성 완료 일지 수정 | 모든 직원 가능, 수정자 기록 | 복지관 답변 7 | 수정 가능 기간을 둘지 |
 | 다른 직원의 작성 중 일지 이어 쓰기 | 작성자만 가능(다른 직원은 403) | 답변 7은 작성 중 일지를 따로 언급하지 않음 | 확인 필요. 8.3(퇴사 직원의 작성 중 일지)과 함께 결정 |
 | 이용자 등록 · 수정 · 종결 | 모든 직원 가능 | 답변 7 '별도 권한 구분 불필요' | 확인 필요 |
-| 계정 추가 · 사용 중지 | 팀장·국장만. 국장 계정은 국장만, 내 계정은 중지 불가 | 답변 7은 기록 권한만 언급 | 확인 필요 |
+| 계정 추가 · 사용 중지 | 팀장·국장만. 계정 추가는 담당자로만. 국장 계정은 국장만, 내 계정은 중지 불가 | 답변 7은 기록 권한만 언급 | 확인 필요 |
+| 역할 변경 (담당자 ↔ 팀장) | 팀장·국장만. 국장 계정·내 계정·사용 중지 계정은 대상 아님 (SF-04) | 2026-11-05 팀 결정 | - |
+| 관리 권한 이양 | 국장만. 국장은 항상 1명, 이양으로만 국장이 된다 (SF-05) | 2026-11-05 팀 결정 | - |
 | 참여 활동 관리 (일지 항목 수정) | 팀장·국장만 | 개발계획서 1.3은 '일지 카테고리 수정'을 국장만 적고 "팀장·국장 권한은 추가 협의 후 확정"이라 함. 복지관 답변 7은 전원 동일 권한. 지금은 계정 관리와 같은 기준으로 둠 | 국장만 / 팀장·국장 / 전원 중 결정 |
 | 회원가입 | 누구나 가입, 항상 담당자(staff) 권한 | 가입 화면은 로그인 전이라 권한을 받지 않음 | 가입을 열어 둘지(계정 추가만 쓸지) |
 
