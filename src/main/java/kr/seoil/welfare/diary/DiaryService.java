@@ -1,5 +1,6 @@
 package kr.seoil.welfare.diary;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
@@ -51,6 +52,12 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
  *     작성 완료 일지는 누구나 수정할 수 있고 수정자가 기록된다 (프론트가 다른 직원의 작성 중 일지를 읽기만 하게 둔 것과 같음)
  *  9. 새 일지(POST)는 오늘(한국 날짜)까지만 쓸 수 있다 — 내일 이후 날짜면 400
  *     수정(PUT)은 날짜를 바꿀 수 없어서(규칙 B-8) 따로 막지 않는다
+ * 10. 일지 날짜가 오늘(한국 시간)보다 뒤면 저장 거절 400 — 새로 만들기·수정, 작성 중·완료 모두 (QA 05-01)
+ *     이미 있는 미래 날짜 일지는 조회·삭제는 되고 저장만 막힌다
+ * 11. 작성 완료로 저장할 때, 도전적 행동 유형을 골랐는데 세부 항목이 없는 활동이 있으면 400 (QA 03-06)
+ *     작성 중 저장은 허용. 상위 '기타'는 세부 목록이 없으니 직접 입력이 비었을 때만 거절
+ *  (빈 일지 완료는 서버가 막지 않는다 — 프론트가 확인 창을 띄움, QA 03-02)
+
  */
 @Service
 public class DiaryService {
@@ -60,6 +67,9 @@ public class DiaryService {
     private static final Set<String> STATUSES = Set.of("draft", "completed");
     /** 도전적 행동 영역의 화면 순서 (프론트 BEHAVIOR_TYPES와 같음) */
     private static final List<String> BEHAVIOR_TYPES = List.of("otherHarm", "selfHarm", "destruction", "other");
+    /** 도전적 행동 유형의 화면 이름 (오류 안내 문구용, 프론트와 같음) */
+    private static final Map<String, String> BEHAVIOR_TYPE_NAMES = Map.of(
+            "otherHarm", "타해", "selfHarm", "자해", "destruction", "파괴행동", "other", "기타");
     /** 연결 테이블이 있는 다중 선택 항목 */
     private static final List<Kind> MULTI = List.of(Kind.PARTICIPATION, Kind.PRE_SUPPORT, Kind.REACTION, Kind.POSITIVE_SUPPORT);
     /** '기타' 직접 입력 최대 글자 수 (DB VARCHAR(200)) */
@@ -322,17 +332,27 @@ public class DiaryService {
 
         boolean completed = "completed".equals(req.status());
         List<CheckedActivity> activities = new ArrayList<>();
+        List<String> behaviorProblems = new ArrayList<>();          // 규칙 11에 걸린 안내 문장들
         if (req.activities() != null) {
             for (ActivityDto a : req.activities()) {
-                activities.add(checkActivity(a, completed));
+                activities.add(checkActivity(a, completed, behaviorProblems));
             }
         }
+        // 규칙 11: 걸린 활동이 둘 이상이면 문장을 이어서 한 번에 알려 준다
+        if (!behaviorProblems.isEmpty()) {
+            throw ApiException.badRequest(String.join(" ", behaviorProblems));
+        }
         checkNoOverlap(activities);
-        return new Checked(parseId(req.userId(), "이용자"), parseDate(req.date()), req.status(),
+        LocalDate date = parseDate(req.date());
+        // 규칙 10: 오늘보다 뒤 날짜는 저장 거절 (오늘은 허용)
+        if (date.isAfter(LocalDate.now(clock))) {
+            throw ApiException.badRequest("오늘 이후 날짜에는 일지를 쓸 수 없어요.");
+        }
+        return new Checked(parseId(req.userId(), "이용자"), date, req.status(),
                 weather, condition, conditionEtc, trimToNull(req.notes()), activities);
     }
 
-    private CheckedActivity checkActivity(ActivityDto a, boolean completed) {
+    private CheckedActivity checkActivity(ActivityDto a, boolean completed, List<String> behaviorProblems) {
         if (a == null) {
             throw ApiException.badRequest("비어 있는 활동이 있어요.");
         }
@@ -362,10 +382,45 @@ public class DiaryService {
             throw ApiException.badRequest("사전 지원 '없음'은 다른 항목과 함께 선택할 수 없어요.");
         }
 
+        // 규칙 11: 작성 완료일 때, 고른 유형에 세부 항목이 없으면 거절 (저장 단계에서는 유형만 있는 선택이 사라지므로 여기서 검사)
+        if (completed && a.hasBehavior()) {
+            checkBehaviorDetails(a, start, end, behaviorProblems);
+        }
         // 도전적 행동: '있음'일 때만 저장
         List<NewPick> behaviors = a.hasBehavior() ? toBehaviorPicks(a.behaviors()) : List.of();
 
         return new CheckedActivity(start, end, trimToNull(a.detail()), a.hasBehavior(), picks, behaviors);
+    }
+
+    /**
+     * 규칙 11: 도전적 행동 유형별로 세부 항목이 있는지 본다. 같은 유형이 여러 번 와도 합쳐서 센다.
+     * 상위 '기타'는 세부 목록이 원래 없어서, 직접 입력(otherText)이 비었을 때만 세부가 없는 것으로 본다.
+     * 걸린 것마다 안내 문장을 problems에 담는다 (한 번에 모아서 보여 주려고 여기서는 던지지 않음)
+     */
+    private static void checkBehaviorDetails(ActivityDto a, LocalTime start, LocalTime end, List<String> problems) {
+        if (a.behaviors() == null) {
+            return;
+        }
+        Map<String, Boolean> hasDetail = new LinkedHashMap<>();       // 유형 → 세부가 있는지 (고른 순서 유지)
+        for (BehaviorDto b : a.behaviors()) {
+            if (b == null || b.type() == null || !BEHAVIOR_TYPES.contains(b.type())) {
+                continue;                                              // 알 수 없는 유형은 저장 단계에서 400
+            }
+            boolean has = "other".equals(b.type())
+                    ? !blank(b.otherText())
+                    : b.detailIds() != null && !b.detailIds().isEmpty();
+            hasDetail.merge(b.type(), has, Boolean::logicalOr);
+        }
+        String time = start.format(HH_MM) + "~" + end.format(HH_MM) + " 활동: ";
+        for (Map.Entry<String, Boolean> e : hasDetail.entrySet()) {
+            if (e.getValue()) {
+                continue;
+            }
+            // '기타'는 고를 세부 목록이 없어서 '적어 달라'고 안내하고, 나머지는 '골라 달라'고 안내
+            problems.add("other".equals(e.getKey())
+                    ? time + "기타 행동 내용을 적어 주세요."
+                    : time + BEHAVIOR_TYPE_NAMES.get(e.getKey()) + "의 세부 행동을 골라 주세요.");
+        }
     }
 
     /** 활동 시각은 10:00~17:00 사이의 30분 단위만 */
