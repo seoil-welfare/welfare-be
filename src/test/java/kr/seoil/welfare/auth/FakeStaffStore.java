@@ -46,6 +46,12 @@ class FakeStaffStore {
             }
 
             @Override
+            public Optional<StaffDto> findByIdForUpdate(long staffId) {
+                log.add("lock:" + staffId);
+                return Optional.ofNullable(rows.get(staffId));
+            }
+
+            @Override
             public int updateRole(long staffId, String role, String position) {
                 StaffDto s = rows.get(staffId);
                 if (s == null) {

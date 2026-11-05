@@ -21,7 +21,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -107,5 +110,70 @@ class StaffControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.message").value("역할 변경은 팀장·국장만 할 수 있어요."));
+    }
+
+    // ---- 관리 권한 이양 ----
+
+    private static final StaffDto NEW_DIRECTOR =
+            new StaffDto("2", "라 팀장", "주간활동지원팀", "국장", "director", "demo.lead", true, null);
+
+    private static StaffDto previous(boolean active) {
+        return new StaffDto("1", "마 국장", "사무국", "팀장", "teamLead", "demo.director", active, null);
+    }
+
+    @Test
+    @DisplayName("POST /api/staff/{id}/transfer-director — deactivate면 200 뒤 세션이 끊기고 다음 요청은 401")
+    void transfer_deactivate_invalidatesSession() throws Exception {
+        given(authService.transferDirector(eq(1L), eq("2"), any()))
+                .willReturn(new TransferDirectorResponse(NEW_DIRECTOR, previous(false)));
+        MockHttpSession session = sessionOf(1);
+
+        mvc.perform(post("/api/staff/2/transfer-director").session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"previousRole\":\"deactivate\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.director.role").value("director"))
+                .andExpect(jsonPath("$.previous.active").value(false));
+
+        assertTrue(session.isInvalid(), "deactivate 뒤에는 세션을 끊어야 한다");
+        mvc.perform(post("/api/staff/3/role")                      // 세션이 끊긴 브라우저의 다음 요청
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"role\":\"teamLead\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("POST /api/staff/{id}/transfer-director — teamLead면 세션 유지")
+    void transfer_teamLead_keepsSession() throws Exception {
+        given(authService.transferDirector(eq(1L), eq("2"), any()))
+                .willReturn(new TransferDirectorResponse(NEW_DIRECTOR, previous(true)));
+        MockHttpSession session = sessionOf(1);
+
+        mvc.perform(post("/api/staff/2/transfer-director").session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"previousRole\":\"teamLead\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.previous.role").value("teamLead"));
+
+        assertFalse(session.isInvalid());
+    }
+
+    @Test
+    @DisplayName("POST /api/staff/{id}/transfer-director — 본문 없이 보내도 200 (서비스가 teamLead로 처리)")
+    void transfer_noBody_ok() throws Exception {
+        given(authService.transferDirector(eq(1L), eq("2"), isNull()))
+                .willReturn(new TransferDirectorResponse(NEW_DIRECTOR, previous(true)));
+
+        mvc.perform(post("/api/staff/2/transfer-director").session(sessionOf(1)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("POST /api/staff/{id}/transfer-director — 로그인 안 했으면 401")
+    void transfer_noSession_401() throws Exception {
+        mvc.perform(post("/api/staff/2/transfer-director")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"previousRole\":\"teamLead\"}"))
+                .andExpect(status().isUnauthorized());
     }
 }

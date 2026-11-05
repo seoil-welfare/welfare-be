@@ -45,6 +45,15 @@ public class StaffQueries {                                     //Spring이 만�
     }
 
     /**
+     * 직원 1명을 찾으면서 그 줄을 트랜잭션이 끝날 때까지 잠근다 (SELECT ... FOR UPDATE).
+     * 관리 권한 이양을 동시에 두 번 눌렀을 때 두 번째 요청이 기다렸다가 바뀐 역할을 보게 한다 (AuthService.transferDirector)
+     */
+    public Optional<StaffDto> findByIdForUpdate(long staffId) {
+        return jdbc.query("SELECT " + COLUMNS + " FROM staff WHERE staff_id = ? FOR UPDATE", MAPPER, staffId)
+                .stream().findFirst();
+    }
+
+    /**
      * 계정 사용 중지(false) / 다시 사용(true). 바뀐 줄 수를 돌려준다.
      * 줄을 지우지 않는다 — 그 직원이 쓴 과거 일지에 작성자 이름이 남아야 하기 때문 (명세서 8.3)
      */

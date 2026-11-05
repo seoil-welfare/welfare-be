@@ -17,6 +17,8 @@ import kr.seoil.welfare.staff.CreateStaffRequest;
 import kr.seoil.welfare.staff.CreatedStaffResponse;
 import kr.seoil.welfare.staff.StaffDto;
 import kr.seoil.welfare.staff.StaffQueries;
+import kr.seoil.welfare.staff.TransferDirectorRequest;
+import kr.seoil.welfare.staff.TransferDirectorResponse;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -199,6 +201,53 @@ public class AuthService {
         }
         staffQueries.updateRole(staffId, role, positionOf(role));
         return staffQueries.findById(staffId).orElseThrow(AuthService::staffNotFound);
+    }
+
+    // ------------------------------------------------------------------
+    // 관리 권한 이양 (국장)
+    // ------------------------------------------------------------------
+
+    /**
+     * 국장이 다른 직원에게 국장 역할을 넘긴다 (SF-05, POST /api/staff/{id}/transfer-director).
+     * StaffController.transferDirector에서 호출. 국장은 항상 1명.
+     *  - 요청한 국장 줄을 잠근 뒤 국장인지 다시 확인한다 (동시에 두 번 눌러도 한 번만 넘어감)
+     *  - 원래 국장을 먼저 팀장으로 내리고(deactivate면 사용 중지까지) 그다음 대상을 국장으로 올린다.
+     *    순서가 반대면 국장 유일 인덱스(V6)에 걸린다
+     *  - 세션을 끊는 일은 컨트롤러가 previous.active를 보고 한다
+     */
+    @Transactional
+    public TransferDirectorResponse transferDirector(long actorId, String targetId, TransferDirectorRequest body) {
+        StaffDto actor = staffQueries.findByIdForUpdate(actorId).orElseThrow(ApiException::unauthenticated);
+        if (!actor.active()) {
+            throw accountDisabled();
+        }
+        if (!"director".equals(actor.role())) {
+            throw forbidden("관리 권한 이양은 국장만 할 수 있어요.");
+        }
+        String previousRole = body == null ? "" : trimToEmpty(body.previousRole());
+        if (previousRole.isEmpty()) {
+            previousRole = "teamLead";                                 // 생략하면 팀장으로 남기
+        }
+        if (!"teamLead".equals(previousRole) && !"deactivate".equals(previousRole)) {
+            throw ApiException.badRequest("이양 뒤 내 계정 처리는 팀장으로 남기 또는 계정 사용 중지 중에서 골라 주세요.");
+        }
+        long staffId = parseStaffId(targetId);
+        StaffDto target = staffQueries.findById(staffId).orElseThrow(AuthService::staffNotFound);
+        if (staffId == actorId) {
+            throw ApiException.badRequest("내 계정에는 관리 권한을 넘길 수 없어요.");
+        }
+        if (!target.active()) {
+            throw ApiException.badRequest("사용이 중지된 계정에는 관리 권한을 넘길 수 없어요.");
+        }
+
+        staffQueries.updateRole(actorId, "teamLead", positionOf("teamLead"));   // 원래 국장 먼저
+        if ("deactivate".equals(previousRole)) {
+            staffQueries.updateActive(actorId, false);
+        }
+        staffQueries.updateRole(staffId, "director", positionOf("director"));   // 그다음 새 국장
+        return new TransferDirectorResponse(
+                staffQueries.findById(staffId).orElseThrow(AuthService::staffNotFound),
+                staffQueries.findById(actorId).orElseThrow(AuthService::staffNotFound));
     }
 
     /** 주소의 직원 번호 → 숫자. 숫자가 아니면 그런 직원은 없는 것이므로 404 */
