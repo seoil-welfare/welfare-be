@@ -1,5 +1,6 @@
 package kr.seoil.welfare.auth;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -83,6 +84,20 @@ class FakeStaffStore {
             public Optional<Account> findById(long staffId) {
                 StaffDto s = rows.get(staffId);
                 return s == null ? Optional.empty() : Optional.of(new Account(staffId, "hash", s.active()));
+            }
+
+            @Override
+            public boolean existsLoginId(String loginId) {
+                return rows.values().stream().anyMatch(s -> loginId.equals(s.loginId()));
+            }
+
+            @Override
+            public long insert(String loginId, String passwordHash, String name, String department,
+                               String position, String role, LocalDate birthDate) {
+                long id = rows.keySet().stream().mapToLong(Long::longValue).max().orElse(0) + 1;
+                rows.put(id, new StaffDto(String.valueOf(id), name, department, position, role, loginId, true,
+                        birthDate == null ? null : birthDate.toString()));
+                return id;
             }
         };
     }

@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.SessionAttribute;
 
 /**
  *  GET  /api/staff   직원 목록 (일지 화면에서 작성자 이름을 보여 줄 때 씀)
- *  POST /api/staff   계정 추가 (팀장·국장만, SF-02). 규칙은 AuthService.createStaff
+ *  POST /api/staff   계정 추가, 담당자로만 (팀장·국장만, SF-02). 규칙은 AuthService.createStaff
  *  POST /api/staff/{id}/deactivate   계정 사용 중지 (팀장·국장만). 규칙은 AuthService.setStaffActive
  *  POST /api/staff/{id}/activate     계정 다시 사용 (팀장·국장만)
  *  POST /api/staff/{id}/role         역할 변경 staff ↔ teamLead (팀장·국장만). 규칙은 AuthService.changeRole

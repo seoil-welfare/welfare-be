@@ -42,7 +42,6 @@ public class AuthService {
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");         // '오늘'은 한국 날짜 기준
     private static final LocalDate MIN_BIRTH_DATE = LocalDate.of(1900, 1, 1);   // 잘못 친 연도(0199 등) 막기
 
-    private static final Set<String> ROLES = Set.of("staff", "teamLead", "director");
     /** 계정 추가를 할 수 있는 역할 (지금 프론트가 팀장·국장에게만 메뉴를 보여 주는 것과 같게) */
     private static final Set<String> STAFF_MANAGERS = Set.of("teamLead", "director");
     /** 역할 변경으로 줄 수 있는 역할 (국장은 이양으로만) */
@@ -83,8 +82,7 @@ public class AuthService {
      *   - 명세서 SF-02: 직위는 역할에서 정해진다
      *   - 가입 화면은 로그인 전이라 누구나 부를 수 있다. 여기서 role을 받으면 아무나
      *     teamLead·director로 가입할 수 있게 되고, 이 시스템은 이용자 개인정보를 다룬다.
-     *   팀장·국장 승격은 담당자 관리 기능(SF-02, POST /api/staff)이 생길 때 로그인한
-     *   팀장·국장만 할 수 있게 만든다. 그때까지는 DB에서 직접 바꾼다 (README 참고).
+     *   팀장 승격은 역할 변경(changeRole), 국장은 관리 권한 이양(transferDirector)으로만 한다.
      */
     @Transactional
     public long signup(SignupRequest body) {
@@ -103,7 +101,7 @@ public class AuthService {
     /**
      * 팀장·국장이 직원 계정을 추가한다 (SF-02, POST /api/staff).
      * 화면에 비밀번호 입력란이 없으므로 서버가 임시 비밀번호를 만들어 응답에 한 번만 담는다.
-     * 국장 계정은 국장만 만들 수 있다 (팀장이 자기보다 높은 권한을 만들지 못하게).
+     * 담당자(staff)로만 만든다. 팀장은 역할 변경(changeRole), 국장은 관리 권한 이양(transferDirector)으로 바꾼다.
      */
     @Transactional
     public CreatedStaffResponse createStaff(long actorId, CreateStaffRequest body) {
@@ -114,17 +112,14 @@ public class AuthService {
         if (body == null) {
             throw ApiException.badRequest("계정 정보를 입력해 주세요.");
         }
-        String role = body.role() == null || body.role().isBlank() ? "staff" : body.role().trim();
-        if (!ROLES.contains(role)) {
-            throw ApiException.badRequest("역할은 staff, teamLead, director 중 하나여야 해요.");
-        }
-        if ("director".equals(role) && !"director".equals(actorRole)) {
-            throw forbidden("국장 계정은 국장만 추가할 수 있어요.");
+        String role = trimToEmpty(body.role());
+        if (!role.isEmpty() && !"staff".equals(role)) {                // 비었거나 staff만 받는다
+            throw ApiException.badRequest("계정 추가는 담당자로만 할 수 있어요. 팀장은 역할 변경으로 바꿔 주세요.");
         }
         NewAccount account = checkNewAccount(body.loginId(), body.name(), body.department(), body.birthDate());
 
         String temporaryPassword = temporaryPassword();
-        long staffId = insertAccount(account, temporaryPassword, role);
+        long staffId = insertAccount(account, temporaryPassword, "staff");
         StaffDto created = staffQueries.findById(staffId)
                 .orElseThrow(() -> new IllegalStateException("방금 만든 계정을 찾지 못했습니다: " + staffId));
         return CreatedStaffResponse.of(created, temporaryPassword);

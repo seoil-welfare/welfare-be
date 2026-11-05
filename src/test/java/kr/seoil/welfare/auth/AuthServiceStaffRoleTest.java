@@ -2,6 +2,7 @@ package kr.seoil.welfare.auth;
 
 import kr.seoil.welfare.common.ApiException;
 import kr.seoil.welfare.staff.ChangeRoleRequest;
+import kr.seoil.welfare.staff.CreateStaffRequest;
 import kr.seoil.welfare.staff.StaffDto;
 import kr.seoil.welfare.staff.TransferDirectorRequest;
 import kr.seoil.welfare.staff.TransferDirectorResponse;
@@ -247,6 +248,32 @@ class AuthServiceStaffRoleTest {
     @DisplayName("담당자에게도 넘길 수 있다")
     void transfer_targetStaff_ok() {
         assertEquals("director", service.transferDirector(1, "3", prev("teamLead")).director().role());
+    }
+
+    // ---- 계정 추가 ----
+
+    private static CreateStaffRequest newStaff(String loginId, String role) {
+        return new CreateStaffRequest("새 직원", loginId, null, null, role, null);
+    }
+
+    @Test
+    @DisplayName("계정 추가: role이 비었거나 staff면 담당자로 만든다")
+    void create_roleBlankOrStaff_staff() {
+        assertEquals("staff", service.createStaff(2, newStaff("new.a", null)).role());
+        assertEquals("staff", service.createStaff(2, newStaff("new.b", "")).role());
+        assertEquals("staff", service.createStaff(1, newStaff("new.c", "staff")).role());
+        assertEquals("사회복지사", store.get(store.rows.size()).position());
+    }
+
+    @Test
+    @DisplayName("계정 추가: teamLead·director·잘못된 값은 400 (국장이 요청해도)")
+    void create_otherRole_400() {
+        ApiException e = expectError(400, "VALIDATION_ERROR", () -> service.createStaff(1, newStaff("new.d", "teamLead")));
+        assertEquals("계정 추가는 담당자로만 할 수 있어요. 팀장은 역할 변경으로 바꿔 주세요.", e.getMessage());
+        expectError(400, "VALIDATION_ERROR", () -> service.createStaff(1, newStaff("new.e", "director")));
+        expectError(400, "VALIDATION_ERROR", () -> service.createStaff(2, newStaff("new.f", "boss")));
+        assertEquals(5, store.rows.size());
+        assertEquals(1, store.countRole("director"));
     }
 
     @Test
