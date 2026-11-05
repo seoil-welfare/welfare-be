@@ -12,5 +12,5 @@ public record CalendarClientStatus(
         String diaryId,                 // 그날 일지 번호. 목록에서 누르면 프론트가 /diaries/{diaryId} 로 이동
         String authorId,                // 처음 작성한 직원 번호. 이름은 프론트가 직원 목록에서 찾음
         int behaviorCount,              // 그날 일지의 도전적 행동 건수
-        boolean canCreate) {            // 새 일지를 쓸 수 있는지 (그날 일지가 없으면 true)
+        boolean canCreate) {            // 새 일지를 쓸 수 있는지 (그날 일지가 없고, 오늘이거나 지난 날이면 true)
 }

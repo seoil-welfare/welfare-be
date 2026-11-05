@@ -130,7 +130,7 @@ v0.3 때 그린 지도라 회원가입(SU)과 참여 활동 관리(PA)는 들어
 
 | 기능 | 화면 동작 (프론트) | 서버 처리 (백엔드) | API · 데이터 | 상태 |
 | --- | --- | --- | --- | --- |
-| **JW-01** 이용자·날짜 표시<br><sub>기획서 FR-08*</sub> | 대상 이용자 선택 상자(이용 중인 이용자만)와 일지 날짜를 표시한다. | - | GET /service-users<br>*client* | 구현 |
+| **JW-01** 이용자·날짜 표시<br><sub>기획서 FR-08*</sub> | 대상 이용자 선택 상자(이용 중인 이용자만)와 일지 날짜를 표시한다. 주소로 오늘 이후 날짜가 오면 작성을 시작하지 않고 "오늘 이후 날짜의 일지는 쓸 수 없어요." 안내와 달력으로 돌아가는 버튼만 보여 준다. | 새 일지(POST)는 오늘(한국 날짜)까지만 받는다. 내일 이후면 400(VALIDATION_ERROR). 수정(PUT)은 날짜를 바꿀 수 없어(B-8) 따로 막지 않는다. | GET /service-users<br>*client* | 구현 |
 | **JW-02** 대상 이용자 변경<br><sub>기획서 FR-09*</sub> | 입력 내용을 유지한 채 대상만 바꾼다. 같은 날 일지가 이미 있는 이용자를 고르면 경고한다. 서버에 한 번이라도 저장된 일지(자동 임시저장 포함)는 이용자를 바꿀 수 없게 막는다(B-8). | 이용자·날짜당 1건. 이미 있으면 덮어쓰지 않고 409(DIARY_ALREADY_EXISTS)와 기존 일지 번호를 돌려준다(B-1). | GET /diaries<br>(from=to=작성일)<br>*daily_log<br>UNIQUE(client_id,<br>log_date)* | 구현<br>409 때 기존 일지로 이동은 없음(문구만) |
 | **JW-03** 날씨 선택<br><sub>기획서 FR-10*</sub> | 서버 목록(GET /categories) 중 1개, 기본값 맑음. 받기 전·실패하면 앱 기본 목록. | 목록에 있는 값인지 검사한다. | (저장 시 함께)<br>*weather* | 구현 |
 | **JW-04** 컨디션 선택<br><sub>기획서 FR-11*</sub> | 서버 목록 중 1개, 기본값 양호. '기타'면 입력란 표시. | '기타'일 때 입력 내용을 저장한다. | (저장 시 함께)<br>*condition_status,<br>condition_etc* | 구현 |
@@ -172,8 +172,8 @@ v0.3 때 그린 지도라 회원가입(SU)과 참여 활동 관리(PA)는 들어
 | 기능 | 화면 동작 (프론트) | 서버 처리 (백엔드) | API · 데이터 | 상태 |
 | --- | --- | --- | --- | --- |
 | **CL-01** 월 달력<br><sub>기획서 미작성</sub> | 화면에 보이는 6주(42일)만 불러온다. 날짜마다 "완료 수/대상 이용자 수"(예: 2/3)와 도전적 행동 여부를 표시. 오늘 칸은 테두리. 원형 게이지는 비교용 설정. | 날짜별 completed·draft·target·hasBehavior를 돌려준다. 일지가 없는 날은 빠진다. 분모(target)는 현재 이용 중 인원, 종결된 이용자 일지는 제외. 최대 42일, 형식 오류 400. | GET /calendar?from&to<br>*daily_log, client* | 구현<br>분모 기준 회의 확인 |
-| **CL-02** 날짜별 이용자 목록<br><sub>기획서 미작성</sub> | 선택한 날의 이용자별 상태(등록·작성 중·미작성)와 도전적 행동 건수. 일지가 있으면 상세로, 미작성이면 그 이용자·날짜로 새 일지 작성. | 이용 중인 이용자마다 status(completed·draft·none), diaryId, authorId, behaviorCount, canCreate를 돌려준다. 작성자 이름은 보내지 않는다(계정 재사용 문제, 회의 확인). | GET /calendar/days/:date<br>*daily_log, client,<br>staff* | 구현 |
-| **CL-03** 새 작성 제한<br><sub>기획서 미작성</sub> | 그날 모든 이용자에게 일지가 있으면 작성 버튼을 숨기고 이유를 표시한다. | B-1과 같은 규칙(canCreate). | -<br>*UNIQUE 제약* | 구현 |
+| **CL-02** 날짜별 이용자 목록<br><sub>기획서 미작성</sub> | 선택한 날의 이용자별 상태(등록·작성 중·미작성)와 도전적 행동 건수. 일지가 있으면 상세로, 미작성이면 그 이용자·날짜로 새 일지 작성. canCreate가 false인 미작성 줄(오늘 이후 날짜)은 누를 수 없고 "오늘 이후 날짜는 아직 쓸 수 없어요"로 표시한다. | 이용 중인 이용자마다 status(completed·draft·none), diaryId, authorId, behaviorCount, canCreate를 돌려준다. canCreate는 그날 일지가 없고 오늘(한국 날짜) 이후가 아닐 때만 true. 작성자 이름은 보내지 않는다(계정 재사용 문제, 회의 확인). | GET /calendar/days/:date<br>*daily_log, client,<br>staff* | 구현 |
+| **CL-03** 새 작성 제한<br><sub>기획서 미작성</sub> | 그날 모든 이용자에게 일지가 있거나 오늘 이후 날짜면 작성 버튼을 숨기고 이유를 표시한다. | B-1과 같은 규칙에 오늘 이후 날짜 금지를 더한 것(canCreate). | -<br>*UNIQUE 제약* | 구현 |
 
 ### 3.9. 통계 메인 (ST)  —  /stats
 
@@ -186,7 +186,7 @@ v0.3 때 그린 지도라 회원가입(SU)과 참여 활동 관리(PA)는 들어
 | **ST-03** 조회 단위<br><sub>기획서 FR-31</sub> | 주·월·분기·연간, 기본은 월. 주 탭을 유지. | - | -<br>*-* | 구현<br>복지관도 주별 필요 |
 | **ST-04** 도전적 행동 기록 건수<br><sub>기획서 FR-32</sub> | 선택된 세부 행동 개수의 합. | 서버가 집계한다(같은 활동의 같은 행동은 1건). | GET /stats/summary<br>(userId, unit, 기간)<br>*record_behavior* | 구현 |
 | **ST-05** 발생 일수<br><sub>기획서 FR-33</sub> | 도전적 행동이 있는 날짜 수. | 서버가 집계한다(날짜 중복 없이). | (ST-04와 같음)<br>*daily_log* | 구현 |
-| **ST-06** 이전 기간 대비 증감<br><sub>기획서 FR-34</sub> | 이전 기간이 0건이면 "–"와 "이전 기간 기록 없음". | 서버가 계산한다(previousEmpty). | (ST-04와 같음)<br>*-* | 구현 |
+| **ST-06** 이전 기간 대비 증감<br><sub>기획서 FR-34</sub> | 이전 기간에 작성 완료 일지가 0건이면 "–"와 "이전 기간 기록 없음". 일지는 있는데 도전적 행동이 0건이면 증감(예: 0건 → 4건은 +4건)을 보여 준다. 오늘이 조회 기간 안(진행 중)이면 증감 카드에 "진행 중"을 붙이고 "오늘까지의 기록을 이전 기간 전체와 비교했어요" 안내를 보여 준다(프론트가 period.end와 오늘로 판단). | 서버가 계산한다(previousEmpty = 이전 기간 완료 일지 수가 0, 행동 건수가 아님). | (ST-04와 같음)<br>*-* | 구현 |
 | **ST-07** 추이 그래프<br><sub>기획서 FR-35</sub> | 막대그래프. 구간은 주 6주·월 6개월·분기 4분기·연 5년. | 서버가 구간별로 집계해 숫자만 보낸다(5년치 일지를 받지 않음). | (ST-04와 같음)<br>*record_behavior* | 구현 |
 | **ST-08** 유형별 도넛<br><sub>기획서 FR-36</sub> | 자해·타해·파괴행동·기타 건수와 비율. 색은 유형별로 고정. | 서버가 집계한다. | (ST-04와 같음)<br>*behavior_area* | 구현 |
 | **ST-09** 도전적 행동 상세 이동<br><sub>기획서 FR-37</sub> | '자세히' → SB. | - | -<br>*-* | 구현 |
@@ -373,10 +373,10 @@ message는 화면에 그대로 표시되므로 사용자가 이해할 수 있는
 | PUT /auth/password | { currentPassword, newPassword } | 204 / 400 | 현재 비밀번호 확인, 규칙 검사, 해시 저장 | SE-02 |
 | GET /diaries | userId, from, to, status (모두 선택, from·to 포함) | Diary[] | 날짜 → 이용자 순 정렬 | HM, JW, EX |
 | GET /diaries/:id | - | Diary / 404 | 활동 포함 전체 | JD, JT, NW-03 |
-| POST /diaries | SaveDiaryInput (diaryId 없음) | Diary / 400 / 409 | id 발급, 작성자 = 로그인 직원. completed면 'created' 이력. 같은 이용자·날짜가 있으면 409 DIARY_ALREADY_EXISTS | JW-08~10 |
+| POST /diaries | SaveDiaryInput (diaryId 없음) | Diary / 400 / 409 | id 발급, 작성자 = 로그인 직원. completed면 'created' 이력. 같은 이용자·날짜가 있으면 409 DIARY_ALREADY_EXISTS. 오늘(한국 날짜) 이후 날짜면 400 VALIDATION_ERROR | JW-01, JW-08~10 |
 | PUT /diaries/:id | SaveDiaryInput + updatedAt | Diary / 400 / 403 / 404 / 409 | 작성자 유지, 활동은 통째로 교체. 상태 전이(4.5), 동시 수정(4.6), 작성 중 일지는 작성자만(403) | JW-08~10, JD-07, JT-06 |
 | GET /calendar | from, to (최대 42일) | 날짜별 { date, completed, draft, target, hasBehavior }[] | 일지 없는 날은 빠짐. 분모는 현재 이용 중 인원 | CL-01 |
-| GET /calendar/days/:date | - | 이용자별 { status, diaryId, authorId, behaviorCount, canCreate }[] | 이용 중인 이용자만 | CL-02, CL-03 |
+| GET /calendar/days/:date | - | 이용자별 { status, diaryId, authorId, behaviorCount, canCreate }[] | 이용 중인 이용자만. 오늘 이후 날짜면 canCreate 전부 false | CL-02, CL-03 |
 | GET /stats/summary | userId, unit, year · month · quarter · week | StatsSummary (5.2) | 작성 완료 일지만 집계 | ST, SB, SA, SC |
 | GET /news | since (포함) | NewsEntry[] | 발생 시각 최신순. 작성 중 저장은 이력 없음 | HM-03, NW |
 | GET /notifications/summary | - | { unreadCount, lastReadAt? } | 마지막으로 읽은 뒤 다른 직원의 소식 수 | MY-10 |
@@ -497,7 +497,7 @@ message는 화면에 그대로 표시되므로 사용자가 이해할 수 있는
 - 작성 완료(completed) 일지만 집계. 작성 중 일지는 제외. 기간 경계는 한국 시간 기준
 - 도전적 행동은 세부 항목 선택 건수. 같은 활동의 같은 행동은 1건, 최상위 '기타'는 내용이 있으면 1건. 발생 일수는 날짜 중복 없이
 - 참여 활동·반응·사전 지원·긍정행동지원은 활동 기준, 컨디션은 일지 기준. '기타' 자유 입력은 '기타'로 합산
-- 정렬은 건수 많은 순, 같으면 정해진 항목 순서(order). 이전 기간이 0건이면 previousEmpty: true
+- 정렬은 건수 많은 순, 같으면 정해진 항목 순서(order). 이전 기간에 작성 완료 일지가 0건이면 previousEmpty: true (도전적 행동이 0건인 것과는 다르다)
 
 ### 5.3. 직원 사용 중지 (SF-03)
 

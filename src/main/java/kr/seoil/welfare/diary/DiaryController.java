@@ -7,6 +7,7 @@ import kr.seoil.welfare.diary.dto.DiaryResponse;
 import kr.seoil.welfare.diary.dto.SaveDiaryRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.SessionAttribute;
  *  GET  /api/diaries/{id}                        1건 (일지 상세)
  *  POST /api/diaries                             새 일지 저장
  *  PUT  /api/diaries/{id}                        일지 수정
+ *  DELETE /api/diaries/{id}                      작성 중 일지 삭제 (204)
  */
 @RestController
 @RequestMapping("/api/diaries")
@@ -67,5 +69,13 @@ public class DiaryController {
                                 @RequestBody SaveDiaryRequest body) {
         long actor = SessionStaff.require(staffId);
         return diaryService.update(id, body, actor);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@SessionAttribute(name = SessionStaff.KEY, required = false) Long staffId,
+                                       @PathVariable String id) {
+        long actor = SessionStaff.require(staffId);
+        diaryService.delete(id, actor);
+        return ResponseEntity.noContent().build();               // 204
     }
 }

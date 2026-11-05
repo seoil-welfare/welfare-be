@@ -28,7 +28,7 @@ public record StatsSummaryResponse(
             int count,                          // 건수 (FR-32)
             int days,                           // 발생 일수 (FR-33)
             int delta,                          // 이전 기간 대비 증감 (FR-34)
-            boolean previousEmpty,              // 이전 기간에 기록이 0건이었는지
+            boolean previousEmpty,              // 이전 기간에 작성 완료 일지가 0건이었는지 (행동 건수가 아님)
             Map<String, Integer> byType,        // 유형별 건수 — 프론트 behaviorCountsByType과 같은 모양
             Map<String, TypeSummary> typeSummary,   // 유형별 건수·발생 일수·증감 (유형 필터로 요약을 바꿀 때, FR-47)
             List<TrendPoint> trend,             // 추이 그래프 (FR-35)

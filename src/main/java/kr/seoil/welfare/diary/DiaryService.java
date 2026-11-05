@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import kr.seoil.welfare.auth.AuthService;
 import kr.seoil.welfare.common.ApiException;
 import kr.seoil.welfare.diary.Catalog.BehaviorItem;
 import kr.seoil.welfare.diary.Catalog.Item;
@@ -49,11 +50,14 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
  *  7. 수정(PUT)은 불러올 때 받은 updatedAt을 함께 보낸다 — 그사이 다른 사람이 저장했으면 409 DIARY_UPDATED_BY_OTHER (명세서 4.6)
  *  8. 작성 중(draft) 일지는 작성자만 수정할 수 있다 — 다른 직원이면 403 FORBIDDEN
  *     작성 완료 일지는 누구나 수정할 수 있고 수정자가 기록된다 (프론트가 다른 직원의 작성 중 일지를 읽기만 하게 둔 것과 같음)
+ *  9. 새 일지(POST)는 오늘(한국 날짜)까지만 쓸 수 있다 — 내일 이후 날짜면 400
+ *     수정(PUT)은 날짜를 바꿀 수 없어서(규칙 B-8) 따로 막지 않는다
  * 10. 일지 날짜가 오늘(한국 시간)보다 뒤면 저장 거절 400 — 새로 만들기·수정, 작성 중·완료 모두 (QA 05-01)
  *     이미 있는 미래 날짜 일지는 조회·삭제는 되고 저장만 막힌다
  * 11. 작성 완료로 저장할 때, 도전적 행동 유형을 골랐는데 세부 항목이 없는 활동이 있으면 400 (QA 03-06)
  *     작성 중 저장은 허용. 상위 '기타'는 세부 목록이 없으니 직접 입력이 비었을 때만 거절
  *  (빈 일지 완료는 서버가 막지 않는다 — 프론트가 확인 창을 띄움, QA 03-02)
+
  */
 @Service
 public class DiaryService {
@@ -75,14 +79,17 @@ public class DiaryService {
     private static final LocalTime LAST_TIME = LocalTime.of(17, 0);
     private static final int SLOT_MINUTES = 30;
 
+    /** 다른 직원의 작성 중 일지를 지울 수 있는 역할 */
+    private static final Set<String> DIARY_MANAGERS = Set.of("teamLead", "director");
+
     private final DiaryRepository repo;
     private final Catalog catalog;
-    private final Clock clock;                                      // '오늘' 기준 (한국 시간, 테스트에서는 고정)
+    private final AuthService authService;
 
-    public DiaryService(DiaryRepository repo, Catalog catalog, Clock clock) {
+    public DiaryService(DiaryRepository repo, Catalog catalog, AuthService authService) {
         this.repo = repo;
         this.catalog = catalog;
-        this.clock = clock;
+        this.authService = authService;
     }
 
     // ==================================================================
@@ -135,6 +142,10 @@ public class DiaryService {
     public DiaryResponse create(SaveDiaryRequest req, long actorId) {
         Checked c = check(req);                                     // 입력값 검사 + 이름→번호 변환
 
+        // 규칙 9: 아직 오지 않은 날의 일지는 새로 쓸 수 없다 ('오늘'은 한국 날짜 기준, 오늘은 허용)
+        if (c.date.isAfter(LocalDate.now(KST))) {
+            throw ApiException.badRequest("오늘 이후 날짜의 일지는 쓸 수 없어요.");
+        }
         if (!repo.clientExists(c.clientId)) {
             throw ApiException.badRequest("없는 이용자예요.");
         }
@@ -201,6 +212,28 @@ public class DiaryService {
             repo.insertHistory(logId, wasCompleted ? "updated" : "created", actorId);
         }
         return saved;
+    }
+
+    /**
+     * DELETE /api/diaries/{id} — 작성 중 일지 삭제 (규칙 9)
+     * 순서: 잠그고 읽기 → 404 → 완료 여부 400 → 권한 403 → 삭제
+     */
+    @Transactional
+    public void delete(String diaryId, long actorId) {
+        long logId = parsePathId(diaryId);
+        LockedLog log = repo.lockLog(logId);                        // 잠그고 읽기 (동시에 저장·삭제해도 순서대로)
+        if (log == null) {
+            throw ApiException.notFound("일지");
+        }
+        if ("completed".equals(log.status())) {
+            throw ApiException.badRequest("작성 완료된 일지는 삭제할 수 없어요.");
+        }
+        // 작성자 본인이면 역할 조회 없이 통과, 아니면 팀장·국장만
+        if (log.createdBy() != actorId && !DIARY_MANAGERS.contains(authService.me(actorId).role())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN",
+                    "작성 중인 일지는 작성한 사람이나 팀장·국장만 삭제할 수 있어요.");
+        }
+        repo.deleteLog(logId);                                      // 활동·소식 이력은 CASCADE로 함께 삭제
     }
 
     /**
