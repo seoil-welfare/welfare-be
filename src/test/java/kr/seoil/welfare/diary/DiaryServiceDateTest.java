@@ -1,9 +1,11 @@
 package kr.seoil.welfare.diary;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 
+import kr.seoil.welfare.auth.AuthService;
 import kr.seoil.welfare.common.ApiException;
 import kr.seoil.welfare.diary.Catalog.Item;
 import kr.seoil.welfare.diary.dto.SaveDiaryRequest;
@@ -22,7 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 새 일지 날짜 규칙 검사 (DiaryService 규칙 9, DB 없음).
+ * 새 일지 날짜 규칙 검사 (DiaryService 규칙 10, DB 없음).
  * DiaryRepository와 Catalog는 Mockito 가짜로 대신한다.
  */
 class DiaryServiceDateTest {
@@ -38,7 +40,7 @@ class DiaryServiceDateTest {
         Catalog catalog = mock(Catalog.class);
         // 날씨·컨디션 이름 → 항목 변환은 이 테스트의 관심사가 아니라 아무 항목이나 돌려준다
         when(catalog.byLabel(any(), any())).thenReturn(new Item((short) 1, "x", "가상 항목", false, 1));
-        service = new DiaryService(repo, catalog);
+        service = new DiaryService(repo, catalog, mock(AuthService.class), Clock.system(ZoneId.of("Asia/Seoul")));
     }
 
     /** 날짜만 다르게 한 작성 중 일지 저장 요청 (가상 이용자 1번) */
@@ -54,7 +56,7 @@ class DiaryServiceDateTest {
                 () -> service.create(draftOn(TODAY.plusDays(1)), 1L));
 
         assertEquals(400, e.getStatus().value());
-        assertEquals("오늘 이후 날짜의 일지는 쓸 수 없어요.", e.getMessage());
+        assertEquals("오늘 이후 날짜에는 일지를 쓸 수 없어요.", e.getMessage());
         verify(repo, never()).insertLog(anyLong(), any(), any(), anyShort(), anyShort(),
                 any(), any(), anyLong());
     }

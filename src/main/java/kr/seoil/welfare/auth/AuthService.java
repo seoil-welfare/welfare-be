@@ -10,7 +10,6 @@ import java.util.regex.Pattern;
 
 import kr.seoil.welfare.auth.dto.ChangePasswordRequest;
 import kr.seoil.welfare.auth.dto.LoginRequest;
-import kr.seoil.welfare.auth.dto.SignupRequest;
 import kr.seoil.welfare.common.ApiException;
 import kr.seoil.welfare.staff.ChangeRoleRequest;
 import kr.seoil.welfare.staff.CreateStaffRequest;
@@ -26,7 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 로그인·회원가입·비밀번호 변경의 규칙을 모아 둔 곳 (명세서 3.1 LG, 3.18 SE).
+ * 로그인·계정 추가·비밀번호 변경의 규칙을 모아 둔 곳 (명세서 3.1 LG, 3.18 SE).
  *
  * 세션(쿠키)을 만들고 지우는 일은 AuthController가 한다. 여기서는 "이 사람이 맞는가"만 판단한다.
  * 이렇게 나누면 서비스 코드는 HttpSession 없이도 테스트할 수 있다.
@@ -69,29 +68,6 @@ public class AuthService {
         this.authRepository = authRepository;
         this.staffQueries = staffQueries;
         this.passwordEncoder = passwordEncoder;
-    }
-
-    // ------------------------------------------------------------------
-    // 회원가입
-    // ------------------------------------------------------------------
-
-    /**
-     * 새 계정을 만들고 직원 번호를 돌려준다.
-     *
-     * ★ role(권한)과 position(직위)은 요청으로 받지 않고 항상 staff / 사회복지사로 넣는다.
-     *   - 명세서 SF-02: 직위는 역할에서 정해진다
-     *   - 가입 화면은 로그인 전이라 누구나 부를 수 있다. 여기서 role을 받으면 아무나
-     *     teamLead·director로 가입할 수 있게 되고, 이 시스템은 이용자 개인정보를 다룬다.
-     *   팀장 승격은 역할 변경(changeRole), 국장은 관리 권한 이양(transferDirector)으로만 한다.
-     */
-    @Transactional
-    public long signup(SignupRequest body) {
-        if (body == null) {
-            throw ApiException.badRequest("가입 정보를 입력해 주세요.");
-        }
-        NewAccount account = checkNewAccount(body.loginId(), body.name(), body.department(), body.birthDate());
-        PasswordPolicy.check(body.password());
-        return insertAccount(account, body.password(), "staff");
     }
 
     // ------------------------------------------------------------------
@@ -258,7 +234,7 @@ public class AuthService {
     private record NewAccount(String loginId, String name, String department, LocalDate birthDate) {
     }
 
-    /** 회원가입·계정 추가 공통 입력 검사 */
+    /** 계정 추가 입력 검사 */
     private NewAccount checkNewAccount(String rawLoginId, String rawName, String rawDepartment,
                                        String rawBirthDate) {
         String loginId = trimToEmpty(rawLoginId).toLowerCase();         // 대소문자로 아이디가 갈리지 않게

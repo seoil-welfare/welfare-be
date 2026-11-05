@@ -48,7 +48,7 @@ public class AuthRepository {
                 .stream().findFirst();
     }
 
-    /** 아이디가 이미 쓰이고 있는지 (회원가입 전 미리 확인) */
+    /** 아이디가 이미 쓰이고 있는지 (계정 추가 전 미리 확인) */
     public boolean existsLoginId(String loginId) {
         Integer count = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM staff WHERE login_id = ?", Integer.class, loginId);

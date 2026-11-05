@@ -85,11 +85,13 @@ public class DiaryService {
     private final DiaryRepository repo;
     private final Catalog catalog;
     private final AuthService authService;
+    private final Clock clock;                                      // '오늘' 기준 (한국 시간, 테스트에서는 고정)
 
-    public DiaryService(DiaryRepository repo, Catalog catalog, AuthService authService) {
+    public DiaryService(DiaryRepository repo, Catalog catalog, AuthService authService, Clock clock) {
         this.repo = repo;
         this.catalog = catalog;
         this.authService = authService;
+        this.clock = clock;
     }
 
     // ==================================================================
@@ -140,12 +142,7 @@ public class DiaryService {
     /** POST /api/diaries — 새 일지 */
     @Transactional                                                  // 중간에 실패하면 전부 되돌림
     public DiaryResponse create(SaveDiaryRequest req, long actorId) {
-        Checked c = check(req);                                     // 입력값 검사 + 이름→번호 변환
-
-        // 규칙 9: 아직 오지 않은 날의 일지는 새로 쓸 수 없다 ('오늘'은 한국 날짜 기준, 오늘은 허용)
-        if (c.date.isAfter(LocalDate.now(KST))) {
-            throw ApiException.badRequest("오늘 이후 날짜의 일지는 쓸 수 없어요.");
-        }
+        Checked c = check(req);                                     // 입력값 검사 + 이름→번호 변환 (오늘 이후 날짜는 여기서 거절, 규칙 10)
         if (!repo.clientExists(c.clientId)) {
             throw ApiException.badRequest("없는 이용자예요.");
         }
