@@ -183,6 +183,14 @@ public class DiaryRepository {
         jdbc.update("DELETE FROM activity_record WHERE log_id = :id", new MapSqlParameterSource("id", logId));
     }
 
+    /**
+     * 일지 한 줄 삭제. 활동(activity_record)·연결 테이블(record_*)·소식 이력(log_history)은
+     * 모두 ON DELETE CASCADE라 함께 지워진다. 지운 줄 수를 돌려준다
+     */
+    public int deleteLog(long logId) {
+        return jdbc.update("DELETE FROM daily_log WHERE log_id = :id", new MapSqlParameterSource("id", logId));
+    }
+
     /** 활동 한 줄 추가 → 발급된 record_id 반환 */
     public long insertRecord(long logId, LocalTime start, LocalTime end, String content, boolean hasBehavior) {
         MapSqlParameterSource p = new MapSqlParameterSource()

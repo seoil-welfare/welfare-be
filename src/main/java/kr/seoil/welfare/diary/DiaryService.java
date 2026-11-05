@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import kr.seoil.welfare.auth.AuthService;
 import kr.seoil.welfare.common.ApiException;
 import kr.seoil.welfare.diary.Catalog.BehaviorItem;
 import kr.seoil.welfare.diary.Catalog.Item;
@@ -48,6 +49,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
  *  7. 수정(PUT)은 불러올 때 받은 updatedAt을 함께 보낸다 — 그사이 다른 사람이 저장했으면 409 DIARY_UPDATED_BY_OTHER (명세서 4.6)
  *  8. 작성 중(draft) 일지는 작성자만 수정할 수 있다 — 다른 직원이면 403 FORBIDDEN
  *     작성 완료 일지는 누구나 수정할 수 있고 수정자가 기록된다 (프론트가 다른 직원의 작성 중 일지를 읽기만 하게 둔 것과 같음)
+ *  9. 삭제(DELETE)는 작성 중 일지만 — 작성 완료 일지는 400, 작성 중 일지는 작성자나 팀장·국장만 (아니면 403)
  */
 @Service
 public class DiaryService {
@@ -66,12 +68,17 @@ public class DiaryService {
     private static final LocalTime LAST_TIME = LocalTime.of(17, 0);
     private static final int SLOT_MINUTES = 30;
 
+    /** 다른 직원의 작성 중 일지를 지울 수 있는 역할 */
+    private static final Set<String> DIARY_MANAGERS = Set.of("teamLead", "director");
+
     private final DiaryRepository repo;
     private final Catalog catalog;
+    private final AuthService authService;
 
-    public DiaryService(DiaryRepository repo, Catalog catalog) {
+    public DiaryService(DiaryRepository repo, Catalog catalog, AuthService authService) {
         this.repo = repo;
         this.catalog = catalog;
+        this.authService = authService;
     }
 
     // ==================================================================
@@ -190,6 +197,28 @@ public class DiaryService {
             repo.insertHistory(logId, wasCompleted ? "updated" : "created", actorId);
         }
         return saved;
+    }
+
+    /**
+     * DELETE /api/diaries/{id} — 작성 중 일지 삭제 (규칙 9)
+     * 순서: 잠그고 읽기 → 404 → 완료 여부 400 → 권한 403 → 삭제
+     */
+    @Transactional
+    public void delete(String diaryId, long actorId) {
+        long logId = parsePathId(diaryId);
+        LockedLog log = repo.lockLog(logId);                        // 잠그고 읽기 (동시에 저장·삭제해도 순서대로)
+        if (log == null) {
+            throw ApiException.notFound("일지");
+        }
+        if ("completed".equals(log.status())) {
+            throw ApiException.badRequest("작성 완료된 일지는 삭제할 수 없어요.");
+        }
+        // 작성자 본인이면 역할 조회 없이 통과, 아니면 팀장·국장만
+        if (log.createdBy() != actorId && !DIARY_MANAGERS.contains(authService.me(actorId).role())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN",
+                    "작성 중인 일지는 작성한 사람이나 팀장·국장만 삭제할 수 있어요.");
+        }
+        repo.deleteLog(logId);                                      // 활동·소식 이력은 CASCADE로 함께 삭제
     }
 
     /**
