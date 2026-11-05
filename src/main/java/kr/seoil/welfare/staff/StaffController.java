@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.SessionAttribute;
  *  POST /api/staff   계정 추가, 담당자로만 (팀장·국장만, SF-02). 규칙은 AuthService.createStaff
  *  POST /api/staff/{id}/deactivate   계정 사용 중지 (팀장·국장만). 규칙은 AuthService.setStaffActive
  *  POST /api/staff/{id}/activate     계정 다시 사용 (팀장·국장만)
+ *  POST /api/staff/{id}/reset-password   임시 비밀번호 다시 발급 (팀장·국장만). 규칙은 AuthService.resetPassword
  *  POST /api/staff/{id}/role         역할 변경 staff ↔ teamLead (팀장·국장만). 규칙은 AuthService.changeRole
  *  POST /api/staff/{id}/transfer-director   관리 권한 이양 (국장만). 규칙은 AuthService.transferDirector
  */
@@ -64,6 +65,14 @@ public class StaffController {
                              @PathVariable String id) {            // 다시 사용할 직원 번호
         long actor = SessionStaff.require(staffId);
         return authService.setStaffActive(actor, id, true);
+    }
+
+    // POST 요청이 오면 실행: 비밀번호를 잊은 직원에게 새 임시 비밀번호 발급 (응답에 한 번만 담긴다)
+    @PostMapping("/{id}/reset-password")
+    public CreatedStaffResponse resetPassword(@SessionAttribute(name = SessionStaff.KEY, required = false) Long staffId,
+                                              @PathVariable String id) {          // 비밀번호를 새로 줄 직원 번호
+        long actor = SessionStaff.require(staffId);
+        return authService.resetPassword(actor, id);
     }
 
     // POST 요청이 오면 실행: 담당자 ↔ 팀장 역할 변경

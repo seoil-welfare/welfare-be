@@ -176,4 +176,24 @@ class StaffControllerTest {
                         .content("{\"previousRole\":\"teamLead\"}"))
                 .andExpect(status().isUnauthorized());
     }
+
+    // ---- 임시 비밀번호 다시 발급 ----
+
+    @Test
+    @DisplayName("POST /api/staff/{id}/reset-password — 200, 직원 정보와 임시 비밀번호")
+    void resetPassword_ok() throws Exception {
+        given(authService.resetPassword(2L, "3")).willReturn(CreatedStaffResponse.of(LEAD3, "abcDEF234567"));
+
+        mvc.perform(post("/api/staff/3/reset-password").session(sessionOf(2)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.loginId").value("demo.staff3"))
+                .andExpect(jsonPath("$.temporaryPassword").value("abcDEF234567"));
+    }
+
+    @Test
+    @DisplayName("POST /api/staff/{id}/reset-password — 로그인 안 했으면 401")
+    void resetPassword_noSession_401() throws Exception {
+        mvc.perform(post("/api/staff/3/reset-password"))
+                .andExpect(status().isUnauthorized());
+    }
 }

@@ -135,6 +135,39 @@ public class AuthService {
     }
 
     // ------------------------------------------------------------------
+    // 임시 비밀번호 다시 발급 (팀장·국장)
+    // ------------------------------------------------------------------
+
+    /**
+     * 비밀번호를 잊은 직원에게 새 임시 비밀번호를 만들어 준다 (POST /api/staff/{id}/reset-password).
+     * 계정 추가와 같은 방식으로 만들어 응답에 한 번만 담는다 (DB에는 해시만 저장). 원래 비밀번호는 더 이상 쓸 수 없다.
+     *  - 팀장·국장만 할 수 있다. 국장 계정은 국장만 (setStaffActive와 같은 규칙)
+     *  - 내 계정은 안 된다. 마이페이지의 비밀번호 변경을 쓴다
+     *  - 사용 중지된 계정은 안 된다. 먼저 다시 사용하게 한다
+     */
+    @Transactional
+    public CreatedStaffResponse resetPassword(long actorId, String targetId) {
+        String actorRole = me(actorId).role();                         // 요청한 사람이 사용 중지 상태면 여기서 403
+        if (!STAFF_MANAGERS.contains(actorRole)) {
+            throw forbidden("임시 비밀번호 발급은 팀장·국장만 할 수 있어요.");
+        }
+        long staffId = parseStaffId(targetId);
+        StaffDto target = staffQueries.findById(staffId).orElseThrow(AuthService::staffNotFound);
+        if (staffId == actorId) {
+            throw ApiException.badRequest("내 비밀번호는 마이페이지의 비밀번호 변경에서 바꿔 주세요.");
+        }
+        if ("director".equals(target.role()) && !"director".equals(actorRole)) {
+            throw forbidden("국장 계정은 국장만 바꿀 수 있어요.");
+        }
+        if (!target.active()) {
+            throw ApiException.badRequest("사용이 중지된 계정은 임시 비밀번호를 발급할 수 없어요.");
+        }
+        String temporaryPassword = temporaryPassword();
+        authRepository.updatePasswordHash(staffId, passwordEncoder.encode(temporaryPassword));
+        return CreatedStaffResponse.of(target, temporaryPassword);
+    }
+
+    // ------------------------------------------------------------------
     // 역할 변경 (팀장·국장)
     // ------------------------------------------------------------------
 

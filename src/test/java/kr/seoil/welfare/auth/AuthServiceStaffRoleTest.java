@@ -294,4 +294,56 @@ class AuthServiceStaffRoleTest {
         expectError(403, "FORBIDDEN", () -> service.transferDirector(1, "3", prev("teamLead")));
         assertEquals(1, store.countRole("director"));
     }
+
+    // ---- 임시 비밀번호 다시 발급 ----
+
+    @Test
+    @DisplayName("팀장이 담당자에게 임시 비밀번호를 새로 발급한다 (12자, DB에는 해시만)")
+    void resetPassword_leadResetsStaff() {
+        var result = service.resetPassword(2, "3");
+        assertEquals("3", result.id());
+        assertEquals(12, result.temporaryPassword().length());
+        assertEquals("hash:" + result.temporaryPassword(), store.passwordHashes.get(3L));
+    }
+
+    @Test
+    @DisplayName("국장도 발급할 수 있다")
+    void resetPassword_directorResetsLead() {
+        var result = service.resetPassword(1, "2");
+        assertEquals("hash:" + result.temporaryPassword(), store.passwordHashes.get(2L));
+    }
+
+    @Test
+    @DisplayName("담당자는 발급할 수 없다 (403)")
+    void resetPassword_staffForbidden() {
+        expectError(403, "FORBIDDEN", () -> service.resetPassword(3, "2"));
+        assertTrue(store.passwordHashes.isEmpty());
+    }
+
+    @Test
+    @DisplayName("팀장은 국장 계정에 발급할 수 없다 (403)")
+    void resetPassword_leadCannotResetDirector() {
+        expectError(403, "FORBIDDEN", () -> service.resetPassword(2, "1"));
+        assertTrue(store.passwordHashes.isEmpty());
+    }
+
+    @Test
+    @DisplayName("내 계정은 안 된다 (400, 마이페이지에서 변경)")
+    void resetPassword_selfRejected() {
+        expectError(400, "VALIDATION_ERROR", () -> service.resetPassword(2, "2"));
+        assertTrue(store.passwordHashes.isEmpty());
+    }
+
+    @Test
+    @DisplayName("사용 중지된 계정은 안 된다 (400)")
+    void resetPassword_inactiveRejected() {
+        expectError(400, "VALIDATION_ERROR", () -> service.resetPassword(2, "4"));
+        assertTrue(store.passwordHashes.isEmpty());
+    }
+
+    @Test
+    @DisplayName("없는 직원이면 404")
+    void resetPassword_unknown404() {
+        expectError(404, "NOT_FOUND", () -> service.resetPassword(2, "99"));
+    }
 }
