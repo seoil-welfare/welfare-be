@@ -48,6 +48,8 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
  *  7. 수정(PUT)은 불러올 때 받은 updatedAt을 함께 보낸다 — 그사이 다른 사람이 저장했으면 409 DIARY_UPDATED_BY_OTHER (명세서 4.6)
  *  8. 작성 중(draft) 일지는 작성자만 수정할 수 있다 — 다른 직원이면 403 FORBIDDEN
  *     작성 완료 일지는 누구나 수정할 수 있고 수정자가 기록된다 (프론트가 다른 직원의 작성 중 일지를 읽기만 하게 둔 것과 같음)
+ *  9. 새 일지(POST)는 오늘(한국 날짜)까지만 쓸 수 있다 — 내일 이후 날짜면 400
+ *     수정(PUT)은 날짜를 바꿀 수 없어서(규칙 B-8) 따로 막지 않는다
  */
 @Service
 public class DiaryService {
@@ -124,6 +126,10 @@ public class DiaryService {
     public DiaryResponse create(SaveDiaryRequest req, long actorId) {
         Checked c = check(req);                                     // 입력값 검사 + 이름→번호 변환
 
+        // 규칙 9: 아직 오지 않은 날의 일지는 새로 쓸 수 없다 ('오늘'은 한국 날짜 기준, 오늘은 허용)
+        if (c.date.isAfter(LocalDate.now(KST))) {
+            throw ApiException.badRequest("오늘 이후 날짜의 일지는 쓸 수 없어요.");
+        }
         if (!repo.clientExists(c.clientId)) {
             throw ApiException.badRequest("없는 이용자예요.");
         }
