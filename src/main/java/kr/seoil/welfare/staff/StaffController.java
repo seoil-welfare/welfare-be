@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.SessionAttribute;
  *  POST /api/staff   계정 추가 (팀장·국장만, SF-02). 규칙은 AuthService.createStaff
  *  POST /api/staff/{id}/deactivate   계정 사용 중지 (팀장·국장만). 규칙은 AuthService.setStaffActive
  *  POST /api/staff/{id}/activate     계정 다시 사용 (팀장·국장만)
+ *  POST /api/staff/{id}/role         역할 변경 staff ↔ teamLead (팀장·국장만). 규칙은 AuthService.changeRole
  */
 
 
@@ -61,5 +62,14 @@ public class StaffController {
                              @PathVariable String id) {            // 다시 사용할 직원 번호
         long actor = SessionStaff.require(staffId);
         return authService.setStaffActive(actor, id, true);
+    }
+
+    // POST 요청이 오면 실행: 담당자 ↔ 팀장 역할 변경
+    @PostMapping("/{id}/role")
+    public StaffDto changeRole(@SessionAttribute(name = SessionStaff.KEY, required = false) Long staffId,
+                               @PathVariable String id,            // 역할을 바꿀 직원 번호
+                               @RequestBody(required = false) ChangeRoleRequest body) {   // 본문이 없으면 서비스에서 400
+        long actor = SessionStaff.require(staffId);
+        return authService.changeRole(actor, id, body);
     }
 }

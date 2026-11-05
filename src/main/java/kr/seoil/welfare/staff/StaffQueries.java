@@ -52,4 +52,10 @@ public class StaffQueries {                                     //Spring이 만�
         return jdbc.update("UPDATE staff SET is_active = ?, updated_at = now() WHERE staff_id = ?",
                 active, staffId);
     }
+
+    /** 역할과 직위 표기를 함께 바꾼다. 바뀐 줄 수를 돌려준다 (AuthService.changeRole에서 호출) */
+    public int updateRole(long staffId, String role, String position) {
+        return jdbc.update("UPDATE staff SET role = ?, position = ?, updated_at = now() WHERE staff_id = ?",
+                role, position, staffId);
+    }
 }

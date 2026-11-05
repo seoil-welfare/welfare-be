@@ -12,6 +12,7 @@ import kr.seoil.welfare.auth.dto.ChangePasswordRequest;
 import kr.seoil.welfare.auth.dto.LoginRequest;
 import kr.seoil.welfare.auth.dto.SignupRequest;
 import kr.seoil.welfare.common.ApiException;
+import kr.seoil.welfare.staff.ChangeRoleRequest;
 import kr.seoil.welfare.staff.CreateStaffRequest;
 import kr.seoil.welfare.staff.CreatedStaffResponse;
 import kr.seoil.welfare.staff.StaffDto;
@@ -42,6 +43,8 @@ public class AuthService {
     private static final Set<String> ROLES = Set.of("staff", "teamLead", "director");
     /** 계정 추가를 할 수 있는 역할 (지금 프론트가 팀장·국장에게만 메뉴를 보여 주는 것과 같게) */
     private static final Set<String> STAFF_MANAGERS = Set.of("teamLead", "director");
+    /** 역할 변경으로 줄 수 있는 역할 (국장은 이양으로만) */
+    private static final Set<String> CHANGEABLE_ROLES = Set.of("staff", "teamLead");
 
     /** 임시 비밀번호 글자: 헷갈리는 글자(0 O 1 l I)는 뺐다 */
     private static final String TEMP_PASSWORD_CHARS = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -156,6 +159,46 @@ public class AuthService {
         }
         staffQueries.updateActive(staffId, active);
         return staffQueries.findById(staffId).orElseThrow(AuthService::staffNotFound);   // 바뀐 정보로 응답
+    }
+
+    // ------------------------------------------------------------------
+    // 역할 변경 (팀장·국장)
+    // ------------------------------------------------------------------
+
+    /**
+     * 담당자를 팀장으로 올리거나 팀장을 담당자로 내린다 (SF-04, POST /api/staff/{id}/role).
+     * StaffController.changeRole에서 호출, StaffQueries.updateRole로 role과 position을 함께 바꾼다.
+     *  - 팀장·국장만 할 수 있다
+     *  - 내 계정, 국장 계정, 사용 중지된 계정은 대상이 될 수 없다
+     *  - director는 줄 수 없다. 국장은 관리 권한 이양으로만 바뀐다
+     *  - 이미 그 역할이면 바꾸지 않고 지금 정보를 돌려준다 (두 번 눌러도 안전)
+     */
+    @Transactional
+    public StaffDto changeRole(long actorId, String targetId, ChangeRoleRequest body) {
+        String actorRole = me(actorId).role();                         // 요청한 사람이 사용 중지 상태면 여기서 403
+        if (!STAFF_MANAGERS.contains(actorRole)) {
+            throw forbidden("역할 변경은 팀장·국장만 할 수 있어요.");
+        }
+        String role = body == null ? "" : trimToEmpty(body.role());
+        if (!CHANGEABLE_ROLES.contains(role)) {
+            throw ApiException.badRequest("역할은 담당자 또는 팀장만 고를 수 있어요.");
+        }
+        long staffId = parseStaffId(targetId);
+        StaffDto target = staffQueries.findById(staffId).orElseThrow(AuthService::staffNotFound);
+        if (staffId == actorId) {                                      // 국장 본인도 403이 아닌 400으로
+            throw ApiException.badRequest("내 계정의 역할은 바꿀 수 없어요.");
+        }
+        if ("director".equals(target.role())) {
+            throw forbidden("국장 계정의 역할은 바꿀 수 없어요.");
+        }
+        if (!target.active()) {
+            throw ApiException.badRequest("사용이 중지된 계정은 역할을 바꿀 수 없어요.");
+        }
+        if (role.equals(target.role())) {
+            return target;
+        }
+        staffQueries.updateRole(staffId, role, positionOf(role));
+        return staffQueries.findById(staffId).orElseThrow(AuthService::staffNotFound);
     }
 
     /** 주소의 직원 번호 → 숫자. 숫자가 아니면 그런 직원은 없는 것이므로 404 */
