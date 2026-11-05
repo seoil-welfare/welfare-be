@@ -1,6 +1,7 @@
 # main에 merge되면 테스트 후 EC2에 배포한다 (deploy/README.md "자동 배포")
 # EC2에는 SSM으로 명령을 보낸다: SSH 포트를 열지 않고, GitHub에 AWS 키나 서버 키를 저장하지 않는다.
 # AWS 권한은 OIDC로 그때그때 받는다 (vars.AWS_ROLE_ARN 역할은 이 저장소의 main에서만 쓸 수 있게 만든다)
+# 역할의 신뢰 조건 sub는 GitHub의 새 형식이다: repo:seoil-welfare@<조직 ID>/welfare-be@<저장소 ID>:ref:refs/heads/main
 name: Deploy
 
 on:
@@ -31,16 +32,7 @@ jobs:
       id-token: write         # OIDC로 AWS 임시 권한 받기
       contents: read
     steps:
-      # AWS 역할의 신뢰 조건과 비교할 수 있게 GitHub이 보내는 토큰의 sub·aud를 찍는다 (비밀 값 아님)
-      - name: OIDC 토큰 확인
-        run: |
-          TOKEN=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
-          PAYLOAD=$(echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+')
-          while [ $(( ${#PAYLOAD} % 4 )) -ne 0 ]; do PAYLOAD="$PAYLOAD="; done
-          echo "$PAYLOAD" | base64 -d | jq '{sub, aud, repository, ref}'
-
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
