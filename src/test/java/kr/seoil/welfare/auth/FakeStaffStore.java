@@ -18,6 +18,7 @@ class FakeStaffStore {
 
     final Map<Long, StaffDto> rows = new LinkedHashMap<>();   // staff_id → 한 줄
     final List<String> log = new ArrayList<>();                // 바꾼 순서 기록 ("role:3:teamLead", "active:1:false")
+    final Map<Long, String> passwordHashes = new LinkedHashMap<>();   // updatePasswordHash로 바뀐 해시
 
     /** 직원 한 명 추가 (position은 role에서 정함) */
     FakeStaffStore put(long id, String role, boolean active) {
@@ -98,6 +99,12 @@ class FakeStaffStore {
                 rows.put(id, new StaffDto(String.valueOf(id), name, department, position, role, loginId, true,
                         birthDate == null ? null : birthDate.toString()));
                 return id;
+            }
+
+            @Override
+            public void updatePasswordHash(long staffId, String passwordHash) {
+                log.add("password:" + staffId);
+                passwordHashes.put(staffId, passwordHash);
             }
         };
     }
