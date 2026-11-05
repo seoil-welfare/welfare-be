@@ -1,0 +1,111 @@
+# 운영 서버 배포 (EC2 + Docker)
+
+```
+브라우저 ──► Vercel (프론트, /api/* 를 그대로 넘김) ──► EC2: nginx(HTTPS) ──► app(Spring Boot) ──► RDS PostgreSQL
+```
+
+- 프론트는 Vercel이 `/api/*`를 이 서버로 넘겨 줍니다(`welfare-fe/vercel.json`). 브라우저는 Vercel 주소만 보므로 CORS 설정이 필요 없습니다.
+- 이 서버의 Docker 이미지는 **항상 `prod` 프로필**로 뜹니다(`Dockerfile`). 개발용 가상 직원·일지(`db/dev`)는 들어가지 않습니다.
+- DB는 Docker에 넣지 않고 RDS를 씁니다. 백업·복구를 AWS가 맡게 하려는 것입니다.
+
+## 파일
+
+| 파일 | 내용 |
+|---|---|
+| `Dockerfile` | jar를 빌드해 Java 21에서 실행하는 이미지 |
+| `docker-compose.yml` | `app`(Spring Boot) + `nginx`(HTTPS) + `certbot`(인증서, 필요할 때만) |
+| `src/main/resources/application-prod.yml` | 운영 설정: 가상 데이터 제외, 로그인 쿠키 `Secure`·`HttpOnly`·`SameSite=Lax` |
+| `deploy/nginx/default.conf.template` | 80은 HTTPS로 보내고, 443은 `/api/`만 Spring Boot로 넘김 |
+| `deploy/.env.prod.example` | RDS 접속 정보와 백엔드 도메인. EC2에서 `deploy/.env.prod`로 복사해 채움 (git에 안 올라감) |
+
+## 처음 한 번 준비
+
+### 1. AWS
+
+1. **RDS PostgreSQL** (서울 리전, `db.t4g.micro` 이상)
+   - 퍼블릭 액세스 **끔**, 저장소 암호화 **켬**, 자동 백업 **켬**
+   - DB 이름 `welfare`, 사용자 `welfare`
+2. **EC2** (서울 리전, `t3.small` 이상, Ubuntu 24.04)
+   - 보안 그룹: 22(내 IP만), 80, 443 열기
+   - 탄력적 IP를 붙여 주소가 바뀌지 않게 하기
+3. **RDS 보안 그룹**: 5432는 **EC2의 보안 그룹에서 오는 것만** 허용
+4. **도메인**: 백엔드용 도메인(예: `api.example.com`)의 A 레코드를 EC2 탄력적 IP로
+
+### 2. EC2에 Docker 설치하고 코드 받기
+
+```bash
+sudo apt update && sudo apt install -y docker.io docker-compose-v2 git
+sudo usermod -aG docker $USER && newgrp docker
+git clone https://github.com/seoil-welfare/welfare-be.git && cd welfare-be
+cp deploy/.env.prod.example deploy/.env.prod
+nano deploy/.env.prod        # RDS 엔드포인트·비밀번호, API_DOMAIN 채우기
+chmod 600 deploy/.env.prod
+```
+
+### 3. HTTPS 인증서 받기 (처음 한 번)
+
+nginx가 켜지기 전에 인증서가 있어야 하므로, 처음 한 번은 certbot이 80번 포트를 직접 씁니다.
+
+```bash
+source deploy/.env.prod
+docker compose run --rm -p 80:80 certbot certonly --standalone \
+  -d "$API_DOMAIN" --agree-tos -m <연락받을 이메일> --no-eff-email
+```
+
+### 4. 실행
+
+```bash
+docker compose up -d --build
+curl https://$API_DOMAIN/api/health      # {"status":"ok", ... "staff":0} 이면 성공
+```
+
+처음 켜질 때 Flyway가 `db/migration`으로 테이블을 만듭니다. `staff`가 0이면 가상 데이터가 안 들어간 것입니다.
+
+### 5. 첫 국장 계정 넣기
+
+회원가입이 없으므로 첫 계정 하나는 DB에 직접 넣습니다. 이 계정으로 로그인해 나머지 직원은 `계정 추가`로 만듭니다.
+
+```bash
+# 비밀번호 해시 만들기 (원문은 기록에 남지 않게 따옴표 안에만 쓰고, 로그인 후 바로 바꾸기)
+docker run --rm httpd:2.4-alpine htpasswd -nbBC 10 "" '<임시 비밀번호>' | tr -d ':\n'; echo
+```
+
+RDS는 외부에서 접속할 수 없으니 EC2에서 접속합니다.
+
+```bash
+docker run --rm -it postgres:18-alpine psql "host=<RDS 엔드포인트> user=welfare dbname=welfare sslmode=require"
+```
+
+```sql
+INSERT INTO staff (login_id, password_hash, name, department, position, role)
+VALUES ('<아이디, 영문 소문자>', '<위에서 만든 해시>', '<이름>', '주간활동지원팀', '국장', 'director');
+```
+
+로그인한 뒤 **마이페이지 → 비밀번호 변경**으로 바로 바꾸세요.
+
+## 새 버전 배포
+
+```bash
+cd welfare-be
+git pull
+docker compose up -d --build app
+```
+
+- 서버가 다시 켜지는 동안(수십 초) 요청이 실패합니다.
+- 로그인 세션이 서버 메모리에 있어서 **배포하면 모두 다시 로그인해야 합니다.**
+
+## 인증서 갱신 (90일마다)
+
+EC2에서 `crontab -e`로 아래 한 줄을 넣어 두면 매주 확인하고, 만료가 가까울 때만 갱신합니다.
+
+```
+0 4 * * 1 cd /home/ubuntu/welfare-be && docker compose run --rm certbot renew --webroot -w /var/www/certbot -q && docker compose exec nginx nginx -s reload
+```
+
+## 확인할 것
+
+- [ ] `https://<API_DOMAIN>/api/health`가 `staff: 0`으로 시작했는지 (가상 데이터 없음)
+- [ ] `http://`로 열면 `https://`로 넘어가는지
+- [ ] RDS에 EC2 말고는 접속할 수 없는지
+- [ ] 로그인 응답의 `Set-Cookie`에 `Secure; HttpOnly; SameSite=Lax`가 있는지
+- [ ] Vercel 주소에서 로그인하고 새로고침해도 로그인이 유지되는지 (아이폰 Safari 포함)

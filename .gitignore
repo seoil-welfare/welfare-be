@@ -10,6 +10,10 @@ out/
 
 # DB 비밀번호가 들어 있는 파일 — 절대 올리지 않음
 .env
+deploy/.env.prod
+
+# 운영 서버의 HTTPS 인증서 (EC2 안에서만 만든다)
+deploy/certbot/
 
 # 운영체제 잡파일
 .DS_Store

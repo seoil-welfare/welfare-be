@@ -1,0 +1,16 @@
+# 운영 서버 설정 (profile: prod). Docker 이미지가 이 프로필로 실행한다 (Dockerfile)
+# DB 접속 정보는 환경변수 DB_URL · DB_USERNAME · DB_PASSWORD로 받는다 (deploy/.env.prod)
+spring:
+  flyway:
+    # 운영용 테이블만. 개발용 가상 데이터(db/dev)는 읽지 않는다
+    locations: classpath:db/migration
+
+server:
+  servlet:
+    session:
+      cookie:
+        # 로그인 쿠키는 HTTPS에서만 보내고, 화면 스크립트에서 읽을 수 없게 한다
+        secure: true
+        http-only: true
+        # 프론트(Vercel)가 /api를 같은 주소로 넘겨 주므로 같은 사이트 쿠키(Lax)로 충분하다
+        same-site: lax
