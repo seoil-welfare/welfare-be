@@ -75,6 +75,9 @@ public class StatsService {
         int count = repo.behaviorCount(clientId, range);
         int prevCount = repo.behaviorCount(clientId, prevRange);
         int days = repo.behaviorDays(clientId, range);
+        // '이전 기간 기록 없음'은 이전 기간에 작성 완료 일지가 하나도 없을 때만이다 (FR-34, ST-06).
+        // 일지는 있는데 도전적 행동이 0건이면 비교할 기록이 있는 것이라 증감(+N건)으로 보여 준다
+        boolean previousEmpty = repo.completedCount(clientId, prevRange) == 0;
 
         // 유형별 — 0건인 유형도 0으로 채워서 4개 모두 보낸다
         Map<String, Integer> found = repo.behaviorByType(clientId, range);
@@ -99,7 +102,7 @@ public class StatsService {
         List<DetailCount> details = repo.behaviorDetailCounts(clientId, range).stream()
                 .map(r -> new DetailCount(r.type(), r.detailId(), r.count()))
                 .toList();
-        Behavior behavior = new Behavior(count, days, count - prevCount, prevCount == 0, byType, typeSummary,
+        Behavior behavior = new Behavior(count, days, count - prevCount, previousEmpty, byType, typeSummary,
                 trend, details, records(repo.behaviorRows(clientId, range)));
         PeriodInfo info = new PeriodInfo(period.unit(), range.label(), range.start().toString(), range.end().toString());
 
