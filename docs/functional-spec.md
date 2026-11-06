@@ -481,7 +481,7 @@ message는 화면에 그대로 표시되므로 사용자가 이해할 수 있는
 | --- | --- |
 | userId | 필수. 이용자 한 명 기준 (전체 합산 통계는 제공하지 않음) |
 | unit | week \| month \| quarter \| year |
-| year · month · quarter · week | unit에 맞는 값. week는 '해당 월의 N주차'(프론트 StatisticPeriod와 같음). 주차 계산과 월 경계 처리는 회의 확인 |
+| year · month · quarter · week | unit에 맞는 값. week는 '해당 월의 N주차'(프론트 StatisticPeriod와 같음). 주는 일요일~토요일로 월 안에서 자르고, 하루짜리 주(1일이 토요일, 말일이 일요일)는 옆 주에 붙인다 |
 
 | 경로 | 응답 | 대응 화면 |
 | --- | --- | --- |
