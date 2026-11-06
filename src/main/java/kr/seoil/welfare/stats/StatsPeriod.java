@@ -56,7 +56,7 @@ public record StatsPeriod(String unit, int year, int month, int quarter, int wee
             int from = spans.get(i)[0];
             int to = spans.get(i)[1];
             ranges.add(new Range(LocalDate.of(year, month, from), LocalDate.of(year, month, to),
-                    year + "년 " + month + "월 " + (i + 1) + "주차 (" + from + "~" + to + "일)"));
+                    year + "년 " + month + "월 " + (i + 1) + "주차"));
         }
         return ranges;
     }

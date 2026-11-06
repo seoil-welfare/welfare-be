@@ -24,7 +24,7 @@ class StatsPeriodWeekTest {
         assertEquals(4, weeks.size());
         assertEquals(LocalDate.of(2025, 2, 1), weeks.get(0).start());
         assertEquals(LocalDate.of(2025, 2, 8), weeks.get(0).end());
-        assertEquals("2025년 2월 1주차 (1~8일)", weeks.get(0).label());
+        assertEquals("2025년 2월 1주차", weeks.get(0).label());
     }
 
     @Test
@@ -32,8 +32,8 @@ class StatsPeriodWeekTest {
     void bothEndsOneDay() {
         List<Range> weeks = StatsPeriod.weeksInMonth(2025, 11);
         assertEquals(4, weeks.size());
-        assertEquals("2025년 11월 1주차 (1~8일)", weeks.get(0).label());
-        assertEquals("2025년 11월 4주차 (23~30일)", weeks.get(3).label());
+        assertEquals(LocalDate.of(2025, 11, 8), weeks.get(0).end());
+        assertEquals(LocalDate.of(2025, 11, 23), weeks.get(3).start());
     }
 
     @Test
@@ -41,7 +41,7 @@ class StatsPeriodWeekTest {
     void twoDayWeekKept() {
         List<Range> weeks = StatsPeriod.weeksInMonth(2026, 8);
         assertEquals(5, weeks.size());
-        assertEquals("2026년 8월 5주차 (30~31일)", weeks.get(4).label());
+        assertEquals(LocalDate.of(2026, 8, 30), weeks.get(4).start());
     }
 
     @Test
