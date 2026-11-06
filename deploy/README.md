@@ -127,7 +127,21 @@ main에 merge → Actions: 테스트 → AWS 임시 권한(OIDC) → SSM으로 E
 2. IAM → 역할 → **역할 생성** → 신뢰할 엔터티: **웹 자격 증명**
    - 자격 증명 공급자: `token.actions.githubusercontent.com`, 대상: `sts.amazonaws.com`
    - GitHub 조직 `seoil-welfare`, 저장소 `welfare-be`, 브랜치 `main` (이 저장소의 main에서만 쓸 수 있게)
-   - 권한은 건너뛰고 이름 `welfare-github-deploy`로 만든 뒤, **인라인 정책**을 추가합니다 (JSON):
+   - 권한은 건너뛰고 이름 `welfare-github-deploy`로 만듭니다.
+   - **만든 뒤 신뢰 관계를 꼭 고칩니다.** GitHub은 이제 토큰의 `sub`에 조직·저장소 ID를 붙여 보냅니다
+     (`repo:seoil-welfare@<조직 ID>/welfare-be@<저장소 ID>:ref:refs/heads/main`). 콘솔은 옛 형식
+     (`repo:seoil-welfare/welfare-be:ref:...`)으로 조건을 만들어서 그대로 두면
+     `Not authorized to perform sts:AssumeRoleWithWebIdentity`로 실패합니다. 신뢰 정책 편집에서 조건을 이렇게 바꿉니다:
+     ```json
+     "Condition": {
+       "StringEquals": {
+         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+         "token.actions.githubusercontent.com:sub": "repo:seoil-welfare@339118369/welfare-be@1408694806:ref:refs/heads/main"
+       }
+     }
+     ```
+     ID를 모르면 워크플로에서 토큰을 찍어 확인합니다 (이 저장소의 `fix/deploy-oidc` 커밋 참고).
+   - **인라인 정책**을 추가합니다 (JSON):
      ```json
      {
        "Version": "2012-10-17",
