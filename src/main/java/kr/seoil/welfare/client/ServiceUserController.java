@@ -56,7 +56,12 @@ public class ServiceUserController {
     @PostMapping("/{id}/close")
     public ServiceUserDto close(@SessionAttribute(name = SessionStaff.KEY, required = false) Long staffId,
                                 @PathVariable String id) {
-        SessionStaff.require(staffId);
-        return serviceUserService.close(id);
+        return serviceUserService.close(id, SessionStaff.require(staffId));
+    }
+
+    @PostMapping("/{id}/reopen")
+    public ServiceUserDto reopen(@SessionAttribute(name = SessionStaff.KEY, required = false) Long staffId,
+                                 @PathVariable String id) {
+        return serviceUserService.reopen(id, SessionStaff.require(staffId));
     }
 }

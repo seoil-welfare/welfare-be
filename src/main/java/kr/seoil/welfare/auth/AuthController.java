@@ -1,12 +1,15 @@
 package kr.seoil.welfare.auth;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import kr.seoil.welfare.auth.dto.ChangePasswordRequest;
 import kr.seoil.welfare.auth.dto.LoginRequest;
 import kr.seoil.welfare.common.ApiException;
 import kr.seoil.welfare.staff.StaffDto;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -40,10 +43,7 @@ public class AuthController {
      * 자동 로그인 체크를 안 하면 1시간, 체크하면 30일. 공용 기기 정책과 정확한 기간은
      * 아직 회의에서 정하지 않았다 (명세서 B-9). 정해지면 이 두 숫자만 바꾸면 된다.
      *
-     * ※ 주의: 지금은 '서버가 세션을 얼마나 들고 있는지'만 길어진다. 세션 쿠키 자체에는
-     *   만료 시각이 없어서 브라우저를 완전히 닫으면 쿠키가 사라진다. 브라우저를 닫았다
-     *   다시 열어도 로그인이 남아 있게 하려면 쿠키에 만료 시각을 넣어야 하는데,
-     *   그건 공용 기기에서 위험할 수 있어 B-9에서 함께 정한다.
+     * 자동 로그인을 선택했을 때만 쿠키도 30일 유지한다. 해제하면 세션 쿠키로 다시 발급한다.
      */
     private static final int SESSION_SECONDS = 60 * 60;                    // 1시간
     private static final int AUTO_LOGIN_SESSION_SECONDS = 60 * 60 * 24 * 30;   // 30일
@@ -59,7 +59,8 @@ public class AuthController {
      * 실패하면 401 INVALID_CREDENTIALS, 사용 중지 계정이면 403 ACCOUNT_DISABLED.
      */
     @PostMapping("/login")
-    public StaffDto login(@RequestBody(required = false) LoginRequest body, HttpServletRequest request) {
+    public StaffDto login(@RequestBody(required = false) LoginRequest body, HttpServletRequest request,
+                          HttpServletResponse response) {
         long staffId = authService.authenticate(body);          // 틀리면 여기서 끝남
 
         HttpSession old = request.getSession(false);
@@ -70,6 +71,7 @@ public class AuthController {
         session.setAttribute(SessionStaff.KEY, staffId);        // ★ 다른 기능들이 꺼내 쓰는 값
         session.setMaxInactiveInterval(
                 Boolean.TRUE.equals(body.autoLogin()) ? AUTO_LOGIN_SESSION_SECONDS : SESSION_SECONDS);
+        sessionCookie(request, response, session.getId(), Boolean.TRUE.equals(body.autoLogin()) ? AUTO_LOGIN_SESSION_SECONDS : -1);
 
         return authService.me(staffId);
     }
@@ -97,8 +99,9 @@ public class AuthController {
      * 여기서 401을 던지면 "로그아웃이 실패했다"는 혼란만 생긴다.
      */
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(HttpServletRequest request) {
+    public ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response) {
         invalidateSession(request);
+        sessionCookie(request, response, "", 0);
         return ResponseEntity.noContent().build();
     }
 
@@ -111,14 +114,24 @@ public class AuthController {
     public ResponseEntity<Void> changePassword(
             @SessionAttribute(name = SessionStaff.KEY, required = false) Long staffId,
             @RequestBody(required = false) ChangePasswordRequest body,
-            HttpServletRequest request) {
+            HttpServletRequest request, HttpServletResponse response) {
         long id = SessionStaff.require(staffId);
         authService.changePassword(id, body);
         invalidateSession(request);                             // 비밀번호가 바뀌었으니 다시 로그인
+        sessionCookie(request, response, "", 0);
         return ResponseEntity.noContent().build();
     }
 
     /** 세션이 있으면 지운다 (없으면 아무것도 안 함) */
+    private static void sessionCookie(HttpServletRequest request, HttpServletResponse response, String value, long maxAge) {
+        String configured = request.getServletContext().getSessionCookieConfig().getName();
+        String path = request.getContextPath().isEmpty() ? "/" : request.getContextPath();
+        boolean secure = request.isSecure() || request.getServletContext().getSessionCookieConfig().isSecure();
+        ResponseCookie cookie = ResponseCookie.from(configured == null ? "JSESSIONID" : configured, value)
+                .path(path).httpOnly(true).secure(secure).sameSite("Lax").maxAge(maxAge).build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
     private static void invalidateSession(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         if (session != null) {

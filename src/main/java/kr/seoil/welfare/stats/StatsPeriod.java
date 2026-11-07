@@ -28,19 +28,17 @@ public record StatsPeriod(String unit, int year, int month, int quarter, int wee
         };
     }
 
-    /** 해당 월의 주차 목록 (1일부터 토요일까지가 1주차, 마지막 주는 월말까지) */
+    /** 해당 월과 만나는 일요일~토요일 7일 주간. 월 경계에서도 자르지 않는다. */
     static List<Range> weeksInMonth(int year, int month) {
-        int lastDay = YearMonth.of(year, month).lengthOfMonth();
+        LocalDate first = LocalDate.of(year, month, 1);
+        LocalDate last = YearMonth.of(year, month).atEndOfMonth();
         List<Range> ranges = new ArrayList<>();
-        int cursor = 1;
+        LocalDate cursor = first.minusDays(first.getDayOfWeek().getValue() % 7);
         int week = 1;
-        while (cursor <= lastDay) {
-            LocalDate date = LocalDate.of(year, month, cursor);
-            int jsDay = date.getDayOfWeek().getValue() % 7;     // 자바 월=1..일=7 → 자바스크립트 일=0..토=6
-            int endDay = Math.min(cursor + (6 - jsDay), lastDay);   // 그 주 토요일 또는 월말
-            ranges.add(new Range(date, LocalDate.of(year, month, endDay),
+        while (!cursor.isAfter(last)) {
+            ranges.add(new Range(cursor, cursor.plusDays(6),
                     year + "년 " + month + "월 " + week + "주차"));
-            cursor = endDay + 1;
+            cursor = cursor.plusWeeks(1);
             week += 1;
         }
         return ranges;
@@ -80,12 +78,11 @@ public record StatsPeriod(String unit, int year, int month, int quarter, int wee
                 return month == 1 ? new StatsPeriod(unit, year - 1, 12, quarter, week)
                         : new StatsPeriod(unit, year, month - 1, quarter, week);
             default: {                                          // week: 1주차 이전은 전달의 마지막 주차
-                if (week > 1) {
-                    return new StatsPeriod(unit, year, month, quarter, week - 1);
-                }
-                int prevMonth = month == 1 ? 12 : month - 1;
-                int prevYear = month == 1 ? year - 1 : year;
-                return new StatsPeriod(unit, prevYear, prevMonth, quarter, weeksInMonth(prevYear, prevMonth).size());
+                LocalDate previousStart = range().start().minusWeeks(1);
+                List<Range> weeks = weeksInMonth(previousStart.getYear(), previousStart.getMonthValue());
+                int index = 0;
+                while (!weeks.get(index).start().equals(previousStart)) index++;
+                return new StatsPeriod(unit, previousStart.getYear(), previousStart.getMonthValue(), quarter, index + 1);
             }
         }
     }

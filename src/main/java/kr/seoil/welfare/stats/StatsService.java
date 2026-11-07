@@ -1,7 +1,5 @@
 package kr.seoil.welfare.stats;
 
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -38,7 +36,6 @@ public class StatsService {
     private static final Set<String> UNITS = Set.of("week", "month", "quarter", "year");
     /** 유형 순서 (프론트 behaviorCountsByType 결과와 같은 키) */
     private static final List<String> BEHAVIOR_TYPES = List.of("otherHarm", "selfHarm", "destruction", "other");
-    private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
 
     private final StatsRepository repo;
     private final Catalog catalog;
@@ -136,16 +133,12 @@ public class StatsService {
         Map<Long, BehaviorRecord> byActivity = new LinkedHashMap<>();
         for (BehaviorRow r : rows) {
             BehaviorRecord record = byActivity.computeIfAbsent(r.recordId(), id -> new BehaviorRecord(
-                    String.valueOf(r.logId()), r.date().toString(), hhmm(r.start()), hhmm(r.end()),
+                    String.valueOf(r.logId()), r.date().toString(), r.start(), r.end(),
                     String.valueOf(id), new ArrayList<>()));
             boolean topOther = "other".equals(r.type());                  // 상위 '기타'만 직접 입력을 보여 준다
             record.behaviors().add(new RecordBehavior(r.type(), r.detailId(), topOther ? r.etcText().trim() : null));
         }
         return List.copyOf(byActivity.values());
-    }
-
-    private static String hhmm(LocalTime t) {
-        return t == null ? null : t.format(HH_MM);
     }
 
     /** 활동 기준 항목별 건수 */

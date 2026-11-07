@@ -2,10 +2,8 @@ package kr.seoil.welfare.diary;
 
 import java.time.Clock;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -45,7 +43,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
  *  4. 저장할 때 활동은 통째로 교체 (지우고 다시 넣기)
  *  5. 작성 완료로 저장할 때만 소식 이력을 남긴다 — 처음 완료 = created, 완료 후 수정 = updated
  *     완료 일지를 바뀐 내용 없이 다시 저장하면 아무것도 바꾸지 않는다 (소식이 쌓이지 않게)
- *  6. 활동 시간은 10:00~17:00, 30분 단위, 같은 일지 안에서 겹치지 않게 (명세서 8.5, 프론트 ACTIVITY_SLOTS와 같음)
+ *  6. 활동 시간은 00:00~24:00 안의 분 단위. 24:00은 종료만 허용하며 같은 일지 안에서 겹치지 않게 한다
  *     작성 완료로 저장할 때는 모든 활동에 시간이 있어야 한다
  *  7. 수정(PUT)은 불러올 때 받은 updatedAt을 함께 보낸다 — 그사이 다른 사람이 저장했으면 409 DIARY_UPDATED_BY_OTHER (명세서 4.6)
  *  8. 작성 중(draft) 일지는 작성자만 수정할 수 있다 — 다른 직원이면 403 FORBIDDEN
@@ -63,7 +61,6 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 public class DiaryService {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-    private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
     private static final Set<String> STATUSES = Set.of("draft", "completed");
     /** 도전적 행동 영역의 화면 순서 (프론트 BEHAVIOR_TYPES와 같음) */
     private static final List<String> BEHAVIOR_TYPES = List.of("otherHarm", "selfHarm", "destruction", "other");
@@ -74,10 +71,6 @@ public class DiaryService {
     private static final List<Kind> MULTI = List.of(Kind.PARTICIPATION, Kind.PRE_SUPPORT, Kind.REACTION, Kind.POSITIVE_SUPPORT);
     /** '기타' 직접 입력 최대 글자 수 (DB VARCHAR(200)) */
     private static final int ETC_MAX = 200;
-    /** 활동 시간 범위와 단위 (복지관 양식) */
-    private static final LocalTime FIRST_TIME = LocalTime.of(10, 0);
-    private static final LocalTime LAST_TIME = LocalTime.of(17, 0);
-    private static final int SLOT_MINUTES = 30;
 
     /** 다른 직원의 작성 중 일지를 지울 수 있는 역할 */
     private static final Set<String> DIARY_MANAGERS = Set.of("teamLead", "director");
@@ -299,7 +292,7 @@ public class DiaryService {
     }
 
     /** 검사를 통과한 활동 1개 */
-    private record CheckedActivity(LocalTime start, LocalTime end, String content, boolean hasBehavior,
+    private record CheckedActivity(Integer start, Integer end, String content, boolean hasBehavior,
                                    Map<Kind, List<NewPick>> picks, List<NewPick> behaviors) {
     }
 
@@ -353,17 +346,15 @@ public class DiaryService {
         if (a == null) {
             throw ApiException.badRequest("비어 있는 활동이 있어요.");
         }
-        LocalTime start = parseTime(a.startTime());
-        LocalTime end = parseTime(a.endTime());
+        Integer start = ActivityTime.parse(a.startTime(), false);
+        Integer end = ActivityTime.parse(a.endTime(), true);
         // 작성 중은 시간을 비워 둘 수 있지만, 작성 완료는 모든 활동에 시간이 있어야 한다
         if (completed && (start == null || end == null)) {
             throw ApiException.badRequest("활동 시간을 골라 주세요.");
         }
-        if (start != null && end != null && !end.isAfter(start)) {
+        if (start != null && end != null && end <= start) {
             throw ApiException.badRequest("종료 시간은 시작 시간보다 늦어야 해요.");
         }
-        checkSlotTime(start);
-        checkSlotTime(end);
 
         // 다중 선택 4종류: 이름 → 번호, '기타' 직접 입력 붙이기
         Map<Kind, List<NewPick>> picks = new HashMap<>();
@@ -371,6 +362,12 @@ public class DiaryService {
         picks.put(Kind.PRE_SUPPORT, toPicks(Kind.PRE_SUPPORT, a.preSupport(), a.preSupportOther()));
         picks.put(Kind.REACTION, toPicks(Kind.REACTION, a.reaction(), a.reactionOther()));
         picks.put(Kind.POSITIVE_SUPPORT, toPicks(Kind.POSITIVE_SUPPORT, a.positiveSupport(), a.positiveSupportOther()));
+
+        long reactionLevels = picks.get(Kind.REACTION).stream()
+                .filter(p -> !catalog.byId(Kind.REACTION, p.itemId()).etc()).count();
+        if (reactionLevels > 1) {
+            throw ApiException.badRequest("이용자 반응의 참여 정도는 하나만 골라 주세요. 기타는 함께 선택할 수 있어요.");
+        }
 
         // 사전 지원 '없음'은 다른 항목과 같이 고를 수 없음 (FR-21)
         List<NewPick> pre = picks.get(Kind.PRE_SUPPORT);
@@ -394,7 +391,7 @@ public class DiaryService {
      * 상위 '기타'는 세부 목록이 원래 없어서, 직접 입력(otherText)이 비었을 때만 세부가 없는 것으로 본다.
      * 걸린 것마다 안내 문장을 problems에 담는다 (한 번에 모아서 보여 주려고 여기서는 던지지 않음)
      */
-    private static void checkBehaviorDetails(ActivityDto a, LocalTime start, LocalTime end, List<String> problems) {
+    private static void checkBehaviorDetails(ActivityDto a, Integer start, Integer end, List<String> problems) {
         if (a.behaviors() == null) {
             return;
         }
@@ -408,7 +405,7 @@ public class DiaryService {
                     : b.detailIds() != null && !b.detailIds().isEmpty();
             hasDetail.merge(b.type(), has, Boolean::logicalOr);
         }
-        String time = start.format(HH_MM) + "~" + end.format(HH_MM) + " 활동: ";
+        String time = ActivityTime.format(start) + "~" + ActivityTime.format(end) + " 활동: ";
         for (Map.Entry<String, Boolean> e : hasDetail.entrySet()) {
             if (e.getValue()) {
                 continue;
@@ -420,16 +417,6 @@ public class DiaryService {
         }
     }
 
-    /** 활동 시각은 10:00~17:00 사이의 30분 단위만 */
-    private static void checkSlotTime(LocalTime t) {
-        if (t == null) {
-            return;
-        }
-        if (t.isBefore(FIRST_TIME) || t.isAfter(LAST_TIME) || t.getMinute() % SLOT_MINUTES != 0 || t.getSecond() != 0) {
-            throw ApiException.badRequest("활동 시간은 10:00~17:00 사이에서 30분 단위로 골라 주세요.");
-        }
-    }
-
     /** 같은 일지 안의 활동 시간이 겹치면 거부 (시간이 있는 활동끼리만 비교) */
     private static void checkNoOverlap(List<CheckedActivity> activities) {
         List<CheckedActivity> timed = activities.stream()
@@ -437,7 +424,7 @@ public class DiaryService {
                 .sorted(Comparator.comparing(CheckedActivity::start))
                 .toList();
         for (int i = 1; i < timed.size(); i++) {
-            if (timed.get(i).start().isBefore(timed.get(i - 1).end())) {
+            if (timed.get(i).start() < timed.get(i - 1).end()) {
                 throw ApiException.badRequest("활동 시간이 다른 활동과 겹쳐요.");
             }
         }
@@ -558,8 +545,8 @@ public class DiaryService {
         Labels positive = labels(Kind.POSITIVE_SUPPORT, picks, r.id());
         return new ActivityDto(
                 String.valueOf(r.id()),
-                r.start() == null ? null : r.start().format(HH_MM),
-                r.end() == null ? null : r.end().format(HH_MM),
+                r.start(),
+                r.end(),
                 participation.names(), participation.other(),
                 r.content() == null ? "" : r.content(),
                 pre.names(), pre.other(),
@@ -665,17 +652,6 @@ public class DiaryService {
             return LocalDate.parse(s.trim());                          // YYYY-MM-DD
         } catch (DateTimeParseException e) {
             throw ApiException.badRequest("날짜는 YYYY-MM-DD 형식이어야 해요.");
-        }
-    }
-
-    private static LocalTime parseTime(String s) {
-        if (blank(s)) {
-            return null;                                               // 시간은 비워 둘 수 있음
-        }
-        try {
-            return LocalTime.parse(s.trim(), HH_MM);                   // HH:mm
-        } catch (DateTimeParseException e) {
-            throw ApiException.badRequest("시간은 HH:mm 형식이어야 해요.");
         }
     }
 

@@ -4,7 +4,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -30,7 +29,7 @@ public class DiaryRepository {
     }
 
     /** activity_record 한 줄 */
-    public record RecordRow(long id, long logId, LocalTime start, LocalTime end,
+    public record RecordRow(long id, long logId, String start, String end,
                             String content, boolean hasBehavior) {
     }
 
@@ -89,7 +88,7 @@ public class DiaryRepository {
                         + " FROM activity_record WHERE log_id IN (:ids) ORDER BY log_id, record_id",
                 new MapSqlParameterSource("ids", logIds),
                 (rs, n) -> new RecordRow(rs.getLong("record_id"), rs.getLong("log_id"),
-                        rs.getObject("start_time", LocalTime.class), rs.getObject("end_time", LocalTime.class),
+                        ActivityTime.fromSql(rs.getString("start_time")), ActivityTime.fromSql(rs.getString("end_time")),
                         rs.getString("content"), rs.getBoolean("has_behavior")));
     }
 
@@ -192,15 +191,15 @@ public class DiaryRepository {
     }
 
     /** 활동 한 줄 추가 → 발급된 record_id 반환 */
-    public long insertRecord(long logId, LocalTime start, LocalTime end, String content, boolean hasBehavior) {
+    public long insertRecord(long logId, Integer start, Integer end, String content, boolean hasBehavior) {
         MapSqlParameterSource p = new MapSqlParameterSource()
                 .addValue("logId", logId)
-                .addValue("start", start, Types.TIME)
-                .addValue("end", end, Types.TIME)
+                .addValue("start", ActivityTime.format(start), Types.VARCHAR)
+                .addValue("end", ActivityTime.format(end), Types.VARCHAR)
                 .addValue("content", content, Types.VARCHAR)
                 .addValue("hasBehavior", hasBehavior);
         Long id = jdbc.queryForObject("INSERT INTO activity_record (log_id, start_time, end_time, content, has_behavior)"
-                + " VALUES (:logId, :start, :end, :content, :hasBehavior) RETURNING record_id", p, Long.class);
+                + " VALUES (:logId, CAST(:start AS time), CAST(:end AS time), :content, :hasBehavior) RETURNING record_id", p, Long.class);
         return id;
     }
 

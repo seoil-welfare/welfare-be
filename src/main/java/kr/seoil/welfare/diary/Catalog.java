@@ -51,12 +51,6 @@ public class Catalog {
     public record BehaviorItem(short id, String code, String areaCode, boolean etc, int sortOrder) {
     }
 
-    /**
-     * 프론트 화면 글자와 DB 이름이 다른 항목 (명세서 6장 5번 '선택지 제공' 띄어쓰기)
-     * 응답할 때 프론트 글자로 바꿔 줘야 화면의 칩이 선택된 상태로 보인다.
-     * 프론트가 코드 방식(명세서 5.1)으로 바뀌면 지운다.
-     */
-    private static final Map<String, String> FRONT_LABEL = Map.of("PRE_SUPPORT:choice", "선택지제공");
 
     private final JdbcTemplate jdbc;
     private volatile Data data;                                 // 처음 쓸 때 채움
@@ -106,7 +100,7 @@ public class Catalog {
 
     /** 응답에 넣을 화면 글자 */
     public String label(Kind kind, Item item) {
-        return FRONT_LABEL.getOrDefault(kind.name() + ":" + item.code(), item.name());
+        return item.name();
     }
 
     /** 도전적 행동 세부 항목을 코드(oh-1 등)로 찾기. 없으면 null */

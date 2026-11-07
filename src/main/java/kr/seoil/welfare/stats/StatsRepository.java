@@ -1,7 +1,7 @@
 package kr.seoil.welfare.stats;
 
 import java.time.LocalDate;
-import java.time.LocalTime;
+import kr.seoil.welfare.diary.ActivityTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -110,7 +110,7 @@ public class StatsRepository {
     }
 
     /** 발생 기록 1줄 = 도전적 행동 1건 (같은 활동이면 recordId가 같다) */
-    public record BehaviorRow(long logId, LocalDate date, long recordId, LocalTime start, LocalTime end,
+    public record BehaviorRow(long logId, LocalDate date, long recordId, String start, String end,
                               String type, String detailId, String etcText) {
     }
 
@@ -122,8 +122,8 @@ public class StatsRepository {
                         + " ba.sort_order, bi.sort_order",
                 params(clientId, range),
                 (rs, n) -> new BehaviorRow(rs.getLong("log_id"), rs.getObject("log_date", LocalDate.class),
-                        rs.getLong("record_id"), rs.getObject("start_time", LocalTime.class),
-                        rs.getObject("end_time", LocalTime.class), rs.getString("type"),
+                        rs.getLong("record_id"), ActivityTime.fromSql(rs.getString("start_time")),
+                        ActivityTime.fromSql(rs.getString("end_time")), rs.getString("type"),
                         rs.getString("detail"), rs.getString("etc_text")));
     }
 

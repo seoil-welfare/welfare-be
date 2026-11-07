@@ -27,6 +27,8 @@ dependencies {
     runtimeOnly 'org.postgresql:postgresql'                                  // PostgreSQL 접속 드라이버
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // Docker 설치 없이 실제 PostgreSQL에서 TIME 24:00·트랜잭션·SQL 계약을 검증한다.
+    testImplementation 'io.zonky.test:embedded-postgres:2.2.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 

@@ -7,6 +7,8 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 
 import kr.seoil.welfare.common.ApiException;
+import kr.seoil.welfare.auth.AuthService;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -15,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 이용자 등록·수정·종결 (명세서 US·CU, FR-91)
  *
- *  - 권한: 모든 직원 가능 (명세서 8.1)
+ *  - 조회·등록·수정은 모든 직원, 종결·재개는 팀장·국장만 가능
  *  - 종결은 삭제가 아니다. status = closed, closed_at = 지금. 과거 일지는 그대로 남는다
  *  - 담당 직원은 비워 둘 수 있다 ('담당 미지정'). 고를 때는 사용 중인 직원만
  */
@@ -40,9 +42,11 @@ public class ServiceUserService {
     };
 
     private final JdbcTemplate jdbc;
+    private final AuthService authService;
 
-    public ServiceUserService(JdbcTemplate jdbc) {
+    public ServiceUserService(JdbcTemplate jdbc, AuthService authService) {
         this.jdbc = jdbc;
+        this.authService = authService;
     }
 
     /** 전체 이용자. 종결된 이용자도 포함 (과거 일지에 이름을 보여 줘야 하므로) */
@@ -76,10 +80,27 @@ public class ServiceUserService {
 
     /** 이용 종결. 이미 종결된 이용자면 그대로 돌려준다 (종결 시각을 덮어쓰지 않게) */
     @Transactional
-    public ServiceUserDto close(String userId) {
+    public ServiceUserDto close(String userId, long actorId) {
+        requireManager(actorId);
         long id = parsePathId(userId);
         jdbc.update("UPDATE client SET status = 'closed', closed_at = now() WHERE client_id = ? AND status = 'active'", id);
         return find(id);
+    }
+
+    /** 종결 취소. 과거 일지를 그대로 두고 같은 이용자를 다시 활성화한다. */
+    @Transactional
+    public ServiceUserDto reopen(String userId, long actorId) {
+        requireManager(actorId);
+        long id = parsePathId(userId);
+        jdbc.update("UPDATE client SET status = 'active', closed_at = NULL WHERE client_id = ? AND status = 'closed'", id);
+        return find(id);
+    }
+
+    private void requireManager(long actorId) {
+        String role = authService.me(actorId).role();
+        if (!"teamLead".equals(role) && !"director".equals(role)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "이용 종결·재개는 팀장·국장만 할 수 있어요.");
+        }
     }
 
     // ------------------------------------------------------------------
@@ -138,7 +159,9 @@ public class ServiceUserService {
     /** 주소의 id (/api/service-users/abc) → 숫자. 잘못되면 그런 이용자는 없는 것이므로 404 */
     private static long parsePathId(String id) {
         try {
-            return Long.parseLong(id.trim());
+            long parsed = Long.parseLong(id == null ? "" : id.trim());
+            if (parsed <= 0) throw ApiException.notFound("이용자");
+            return parsed;
         } catch (NumberFormatException e) {
             throw ApiException.notFound("이용자");
         }
