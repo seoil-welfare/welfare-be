@@ -11,7 +11,7 @@ import java.util.List;
  * 서버와 프론트가 같은 기간을 쓰도록, 규칙을 바꿀 때는 두 곳을 함께 바꾼다.
  *
  *  unit   : week | month | quarter | year
- *  week   : '해당 월의 N주차' — 1일이 포함된 주가 1주차, 주는 일요일~토요일 (주차 계산은 회의 확인 사항)
+ *  week   : '해당 월의 N주차' — 1일이 포함된 주가 1주차, 월 경계에서도 일요일~토요일 7일 전체
  */
 public record StatsPeriod(String unit, int year, int month, int quarter, int week) {
 
