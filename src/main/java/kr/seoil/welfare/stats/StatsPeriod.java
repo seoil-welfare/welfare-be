@@ -11,7 +11,7 @@ import java.util.List;
  * 서버와 프론트가 같은 기간을 쓰도록, 규칙을 바꿀 때는 두 곳을 함께 바꾼다.
  *
  *  unit   : week | month | quarter | year
- *  week   : '해당 월의 N주차' — 1일이 포함된 주가 1주차, 주는 일요일~토요일 (주차 계산은 회의 확인 사항)
+ *  week   : '해당 월의 N주차' — 1일이 포함된 주가 1주차, 주는 일요일~토요일, 하루짜리 주는 옆 주에 붙임
  */
 public record StatsPeriod(String unit, int year, int month, int quarter, int week) {
 
@@ -28,20 +28,35 @@ public record StatsPeriod(String unit, int year, int month, int quarter, int wee
         };
     }
 
-    /** 해당 월의 주차 목록 (1일부터 토요일까지가 1주차, 마지막 주는 월말까지) */
+    /**
+     * 해당 월의 주차 목록. 주는 일요일~토요일이고 월 안에서 자른다.
+     * 하루짜리 주(1일이 토요일, 말일이 일요일)는 옆 주에 붙인다. 이전 주와 비교할 때 증감이 크게 왜곡되기 때문.
+     */
     static List<Range> weeksInMonth(int year, int month) {
         int lastDay = YearMonth.of(year, month).lengthOfMonth();
+        List<int[]> spans = new ArrayList<>();                  // {시작일, 끝일}
+        for (int from = 1; from <= lastDay; ) {
+            int jsDay = LocalDate.of(year, month, from).getDayOfWeek().getValue() % 7;  // 일=0 ~ 토=6 (프론트 getDay와 같게)
+            int to = Math.min(from + (6 - jsDay), lastDay);    // 그 주 토요일 또는 말일
+            spans.add(new int[] {from, to});
+            from = to + 1;
+        }
+        if (spans.size() > 1 && spans.get(0)[0] == spans.get(0)[1]) {              // 첫 주가 하루면 다음 주에 붙임
+            spans.get(1)[0] = 1;
+            spans.remove(0);
+        }
+        int last = spans.size() - 1;
+        if (last > 0 && spans.get(last)[0] == spans.get(last)[1]) {                // 마지막 주가 하루면 앞 주에 붙임
+            spans.get(last - 1)[1] = lastDay;
+            spans.remove(last);
+        }
+
         List<Range> ranges = new ArrayList<>();
-        int cursor = 1;
-        int week = 1;
-        while (cursor <= lastDay) {
-            LocalDate date = LocalDate.of(year, month, cursor);
-            int jsDay = date.getDayOfWeek().getValue() % 7;     // 자바 월=1..일=7 → 자바스크립트 일=0..토=6
-            int endDay = Math.min(cursor + (6 - jsDay), lastDay);   // 그 주 토요일 또는 월말
-            ranges.add(new Range(date, LocalDate.of(year, month, endDay),
-                    year + "년 " + month + "월 " + week + "주차"));
-            cursor = endDay + 1;
-            week += 1;
+        for (int i = 0; i < spans.size(); i++) {
+            int from = spans.get(i)[0];
+            int to = spans.get(i)[1];
+            ranges.add(new Range(LocalDate.of(year, month, from), LocalDate.of(year, month, to),
+                    year + "년 " + month + "월 " + (i + 1) + "주차"));
         }
         return ranges;
     }
