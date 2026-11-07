@@ -16,3 +16,7 @@
 PostgresRoundTripTest는 [Embedded PostgreSQL](https://github.com/zonkyio/embedded-postgres)로 임시 PostgreSQL을 시작하고 운영 Flyway 마이그레이션을 실행한다. 운영 DB·외부 서버에는 접속하지 않는다. 24:00 왕복, 통계 응답, 종결·재개 이력 보존, 실제 두 트랜잭션의 같은 버전 수정 시 1건 성공/1건 409를 검증한다. Windows와 일반 Linux 사용자 환경에서 실행하며 초기 의존성 다운로드와 임시 프로세스 실행 권한이 필요하다.
 
 OneDrive가 build/test-results를 잠그는 경우 빌드 디렉터리를 로컬 임시 폴더로 분리해 실행한다. 실패 결과를 통과로 간주하거나 테스트를 건너뛰지 않는다.
+
+## 최신 main 통합 검증
+
+원격 main `2fa54c2`까지의 커밋 이력을 보존해 점검 수정과 통합했다. 주차는 확정한 7일 전체 규칙으로 맞추고 새 main의 주차 검사 5개도 이 규칙으로 갱신했다. 전체 204개 검사(실패·오류·건너뜀 0)와 bootJar 빌드가 성공했다. FE도 같은 주차 규칙으로 계산하며 주간의 실제 시작·종료 날짜를 표시한다.
