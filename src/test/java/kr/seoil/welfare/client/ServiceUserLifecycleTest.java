@@ -31,7 +31,7 @@ class ServiceUserLifecycleTest {
     }
 
     void role(String role) {
-        when(auth.me(1L)).thenReturn(new StaffDto("1", "직원", "팀", "직위", role, "demo", true, null));
+        when(auth.me(1L)).thenReturn(new StaffDto("1", "직원", "팀", "직위", role, "demo", true, null, false));
     }
 
     static Stream<Arguments> managers() {

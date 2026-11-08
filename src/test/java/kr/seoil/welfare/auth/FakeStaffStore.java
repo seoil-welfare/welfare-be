@@ -23,7 +23,7 @@ class FakeStaffStore {
     /** 직원 한 명 추가 (position은 role에서 정함) */
     FakeStaffStore put(long id, String role, boolean active) {
         rows.put(id, new StaffDto(String.valueOf(id), "직원" + id, "주간활동지원팀",
-                AuthService.positionOf(role), role, "user" + id, active, null));
+                AuthService.positionOf(role), role, "user" + id, active, null, false));
         return this;
     }
 
@@ -61,7 +61,7 @@ class FakeStaffStore {
                 }
                 log.add("role:" + staffId + ":" + role);
                 rows.put(staffId, new StaffDto(s.id(), s.name(), s.department(), position, role,
-                        s.loginId(), s.active(), s.birthDate()));
+                        s.loginId(), s.active(), s.birthDate(), s.mustChangePassword()));
                 return 1;
             }
 
@@ -73,7 +73,7 @@ class FakeStaffStore {
                 }
                 log.add("active:" + staffId + ":" + active);
                 rows.put(staffId, new StaffDto(s.id(), s.name(), s.department(), s.position(), s.role(),
-                        s.loginId(), active, s.birthDate()));
+                        s.loginId(), active, s.birthDate(), s.mustChangePassword()));
                 return 1;
             }
         };
@@ -97,14 +97,19 @@ class FakeStaffStore {
                                String position, String role, LocalDate birthDate) {
                 long id = rows.keySet().stream().mapToLong(Long::longValue).max().orElse(0) + 1;
                 rows.put(id, new StaffDto(String.valueOf(id), name, department, position, role, loginId, true,
-                        birthDate == null ? null : birthDate.toString()));
+                        birthDate == null ? null : birthDate.toString(), true));   // 계정 추가는 임시 비밀번호 상태
                 return id;
             }
 
             @Override
-            public void updatePasswordHash(long staffId, String passwordHash) {
+            public void updatePasswordHash(long staffId, String passwordHash, boolean mustChangePassword) {
                 log.add("password:" + staffId);
                 passwordHashes.put(staffId, passwordHash);
+                StaffDto s = rows.get(staffId);
+                if (s != null) {
+                    rows.put(staffId, new StaffDto(s.id(), s.name(), s.department(), s.position(), s.role(),
+                            s.loginId(), s.active(), s.birthDate(), mustChangePassword));
+                }
             }
         };
     }

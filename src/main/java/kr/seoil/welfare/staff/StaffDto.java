@@ -13,6 +13,7 @@ public record StaffDto(
         String role,            // staff | teamLead | director
         String loginId,         // 로그인 아이디
         boolean active,         // 사용 중이면 true, 사용 중지된 계정이면 false (staff.is_active)
-        String birthDate        // 생년월일 YYYY-MM-DD (없으면 응답에서 빠짐)
+        String birthDate,       // 생년월일 YYYY-MM-DD (없으면 응답에서 빠짐)
+        boolean mustChangePassword  // 임시 비밀번호 상태라 비밀번호를 바꿔야 하면 true (staff.must_change_password)
 ) {
 }
