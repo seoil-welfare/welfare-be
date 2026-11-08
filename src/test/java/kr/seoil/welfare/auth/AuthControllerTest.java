@@ -42,7 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthControllerTest {
 
     private static final StaffDto DEMO =
-            new StaffDto("1", "가 담당", "주간활동지원팀", "사회복지사", "staff", "demo.staff1",true,null);
+            new StaffDto("1", "가 담당", "주간활동지원팀", "사회복지사", "staff", "demo.staff1",true, null, false);
 
     @Autowired
     private MockMvc mvc;

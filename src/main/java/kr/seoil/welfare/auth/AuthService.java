@@ -163,7 +163,7 @@ public class AuthService {
             throw ApiException.badRequest("사용이 중지된 계정은 임시 비밀번호를 발급할 수 없어요.");
         }
         String temporaryPassword = temporaryPassword();
-        authRepository.updatePasswordHash(staffId, passwordEncoder.encode(temporaryPassword));
+        authRepository.updatePasswordHash(staffId, passwordEncoder.encode(temporaryPassword), true);   // 다음 로그인 때 변경 요구
         return CreatedStaffResponse.of(target, temporaryPassword);
     }
 
@@ -422,7 +422,7 @@ public class AuthService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PASSWORD_POLICY",
                     "지금 쓰는 비밀번호와 다르게 정해 주세요.");
         }
-        authRepository.updatePasswordHash(staffId, passwordEncoder.encode(body.newPassword()));
+        authRepository.updatePasswordHash(staffId, passwordEncoder.encode(body.newPassword()), false);  // 임시 비밀번호 상태 해제
     }
 
     // ------------------------------------------------------------------

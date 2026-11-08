@@ -63,8 +63,8 @@ public class AuthRepository {
     public long insert(String loginId, String passwordHash, String name,
                        String department, String position, String role, LocalDate birthDate) {
         Long staffId = jdbc.queryForObject("""
-                INSERT INTO staff (login_id, password_hash, name, department, position, role, birth_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO staff (login_id, password_hash, name, department, position, role, birth_date, must_change_password)
+                VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
                 RETURNING staff_id
                 """, Long.class, loginId, passwordHash, name, department, position, role, birthDate);
         if (staffId == null) {                       // 정상 동작에서는 일어나지 않는다
@@ -73,9 +73,12 @@ public class AuthRepository {
         return staffId;
     }
 
-    /** 비밀번호 해시 바꾸기 (SE-02) */
-    public void updatePasswordHash(long staffId, String passwordHash) {
-        jdbc.update("UPDATE staff SET password_hash = ?, updated_at = now() WHERE staff_id = ?",
-                passwordHash, staffId);
+    /**
+     * 비밀번호 해시 바꾸기 (SE-02).
+     * mustChangePassword: 임시 비밀번호를 새로 준 경우 true(다음 로그인 때 변경 요구), 본인이 바꾼 경우 false
+     */
+    public void updatePasswordHash(long staffId, String passwordHash, boolean mustChangePassword) {
+        jdbc.update("UPDATE staff SET password_hash = ?, must_change_password = ?, updated_at = now() WHERE staff_id = ?",
+                passwordHash, mustChangePassword, staffId);
     }
 }

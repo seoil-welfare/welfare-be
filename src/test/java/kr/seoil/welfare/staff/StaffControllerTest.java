@@ -43,7 +43,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class StaffControllerTest {
 
     private static final StaffDto LEAD3 =
-            new StaffDto("3", "다 담당", "주간활동지원팀", "팀장", "teamLead", "demo.staff3", true, null);
+            new StaffDto("3", "다 담당", "주간활동지원팀", "팀장", "teamLead", "demo.staff3", true, null, false);
 
     @Autowired
     private MockMvc mvc;
@@ -115,10 +115,10 @@ class StaffControllerTest {
     // ---- 관리 권한 이양 ----
 
     private static final StaffDto NEW_DIRECTOR =
-            new StaffDto("2", "라 팀장", "주간활동지원팀", "국장", "director", "demo.lead", true, null);
+            new StaffDto("2", "라 팀장", "주간활동지원팀", "국장", "director", "demo.lead", true, null, false);
 
     private static StaffDto previous(boolean active) {
-        return new StaffDto("1", "마 국장", "사무국", "팀장", "teamLead", "demo.director", active, null);
+        return new StaffDto("1", "마 국장", "사무국", "팀장", "teamLead", "demo.director", active, null, false);
     }
 
     @Test

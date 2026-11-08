@@ -346,4 +346,21 @@ class AuthServiceStaffRoleTest {
     void resetPassword_unknown404() {
         expectError(404, "NOT_FOUND", () -> service.resetPassword(2, "99"));
     }
+
+    // ---- 첫 로그인 비밀번호 변경 ----
+
+    @Test
+    @DisplayName("계정 추가한 직원은 비밀번호 변경이 필요한 상태로 만들어진다")
+    void mustChange_afterCreate() {
+        var created = service.createStaff(2, newStaff("new.must", null));
+        assertTrue(store.get(Long.parseLong(created.id())).mustChangePassword());
+    }
+
+    @Test
+    @DisplayName("임시 비밀번호를 다시 발급하면 비밀번호 변경이 필요한 상태가 된다")
+    void mustChange_afterReset() {
+        assertFalse(store.get(3).mustChangePassword());
+        service.resetPassword(2, "3");
+        assertTrue(store.get(3).mustChangePassword());
+    }
 }
