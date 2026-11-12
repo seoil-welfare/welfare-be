@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Set;
 
 import kr.seoil.welfare.auth.AuthService;
+import kr.seoil.welfare.card.CardRules;
 import kr.seoil.welfare.common.ApiException;
 import kr.seoil.welfare.diary.Catalog;
 import org.springframework.http.HttpStatus;
@@ -69,7 +70,8 @@ public class CategoryService {
         if (label == null) {
             throw ApiException.badRequest("추가할 참여 활동 이름을 입력해 주세요.");
         }
-        String code = repo.insertParticipation(label);
+        String pictogram = checkPictogram(body.pictogram());
+        String code = repo.insertParticipation(label, pictogram == null ? "favorite" : pictogram);
         catalog.reload();                                   // 일지 저장에서도 새 항목을 쓸 수 있게
         return repo.findParticipation(code).orElseThrow();
     }
@@ -79,15 +81,15 @@ public class CategoryService {
         checkManager(actorId);
         CategoryItem current = repo.findParticipation(code)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "찾을 수 없는 참여 활동이에요."));
-        if (body == null || (body.label() == null && body.active() == null)) {
-            throw ApiException.badRequest("바꿀 이름이나 사용 여부를 보내 주세요.");
+        if (body == null || (body.label() == null && body.active() == null && body.pictogram() == null)) {
+            throw ApiException.badRequest("바꿀 이름, 사용 여부, 기본 그림 중 하나를 보내 주세요.");
         }
         String label = checkLabel(body.label(), current.code());
         if (Boolean.FALSE.equals(body.active()) && current.etc()) {
             // 기타를 숨기면 목록에 없는 활동을 적을 곳이 사라진다
             throw ApiException.badRequest("'기타'는 숨길 수 없어요.");
         }
-        repo.updateParticipation(current.code(), label, body.active());
+        repo.updateParticipation(current.code(), label, body.active(), checkPictogram(body.pictogram()));
         catalog.reload();                                   // 일지 저장·응답에 바뀐 이름이 쓰이게
         return repo.findParticipation(current.code()).orElseThrow();
     }
@@ -95,6 +97,18 @@ public class CategoryService {
     // ------------------------------------------------------------------
     // 도우미
     // ------------------------------------------------------------------
+
+    /** 오늘 카드 기본 그림 검사 (보내지 않았으면 null) */
+    private static String checkPictogram(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String pictogram = raw.trim();
+        if (!CardRules.PICTOGRAMS.contains(pictogram)) {
+            throw ApiException.badRequest("기본 그림은 " + String.join(", ", CardRules.PICTOGRAMS) + " 중에서 골라 주세요.");
+        }
+        return pictogram;
+    }
 
     /** 팀장·국장이 아니면 403 (사용 중지된 계정이면 me()에서 403) */
     private void checkManager(long actorId) {

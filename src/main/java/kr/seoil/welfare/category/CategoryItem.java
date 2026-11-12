@@ -9,6 +9,7 @@ public record CategoryItem(
         String label,       // 화면에 보이는 이름 (DB name)
         int order,          // 화면 순서 (DB sort_order)
         boolean active,     // false면 새 일지에서는 숨김. 과거 일지·통계에는 그대로 남음
-        boolean etc         // '기타'면 true → 화면에 직접 입력칸을 보여 줌
+        boolean etc,        // '기타'면 true → 화면에 직접 입력칸을 보여 줌
+        String pictogram    // 참여 활동만: 오늘 카드 기본 그림 (그 밖의 목록은 null → 응답에서 빠짐)
 ) {
 }

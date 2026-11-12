@@ -35,3 +35,14 @@ spring:
 
 server:
   port: 8080                   # 프론트 .env.local의 VITE_API_PROXY_TARGET=http://localhost:8080 과 맞춤
+
+# 오늘 카드 (docs/오늘카드_API_명세.md)
+card:
+  secret: ${CARD_SECRET:local-dev-card-secret-0123456789}   # 링크 토큰 암호화·확인 쿠키 서명 키. 운영은 반드시 CARD_SECRET으로 바꾼다
+  share-base-url: ${CARD_SHARE_BASE_URL:http://localhost:5173}   # 공유 링크 앞부분 (프론트 주소)
+  cookie-secure: false
+  ai:
+    api-key: ${OPENAI_API_KEY:}            # 비어 있으면 AI 없이 정해진 문장으로 만든다
+    model: ${OPENAI_MODEL:gpt-5.4-mini}
+    reasoning-effort: ${OPENAI_REASONING_EFFORT:low}
+    timeout: 30s

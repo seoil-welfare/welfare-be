@@ -28,7 +28,8 @@ public class CategoryRepository {
             rs.getString("name"),
             rs.getInt("sort_order"),
             rs.getBoolean("is_active"),
-            rs.getBoolean("is_etc"));
+            rs.getBoolean("is_etc"),
+            rs.getString("pictogram"));
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -43,7 +44,8 @@ public class CategoryRepository {
      */
     public List<CategoryItem> list(String table, boolean hasEtc) {
         String etc = hasEtc ? "is_etc" : "FALSE AS is_etc";
-        return jdbc.query("SELECT code, name, sort_order, is_active, " + etc
+        String pictogram = "activity_type".equals(table) ? "pictogram" : "NULL AS pictogram";   // 그림은 참여 활동만
+        return jdbc.query("SELECT code, name, sort_order, is_active, " + etc + ", " + pictogram
                 + " FROM " + table + " ORDER BY sort_order, code", ITEM);
     }
 
@@ -56,7 +58,7 @@ public class CategoryRepository {
     /** 도전적 행동 세부 항목을 영역별로 묶기 { otherHarm: [...], selfHarm: [...], ... } (영역 순서 유지) */
     public Map<String, List<CategoryItem>> behaviorDetails() {
         Map<String, List<CategoryItem>> result = new LinkedHashMap<>();   // 넣은 순서대로 꺼내지는 Map
-        jdbc.query("SELECT a.code AS area_code, i.code, i.name, i.sort_order, i.is_active, i.is_etc"
+        jdbc.query("SELECT a.code AS area_code, i.code, i.name, i.sort_order, i.is_active, i.is_etc, NULL AS pictogram"
                         + " FROM behavior_item i JOIN behavior_area a ON a.area_id = i.area_id"
                         + " ORDER BY a.sort_order, i.sort_order",
                 rs -> {
@@ -69,7 +71,7 @@ public class CategoryRepository {
 
     /** 참여 활동 1개를 코드로 찾기 (없으면 빈 Optional) */
     public Optional<CategoryItem> findParticipation(String code) {
-        return jdbc.query("SELECT code, name, sort_order, is_active, is_etc FROM activity_type WHERE code = :code",
+        return jdbc.query("SELECT code, name, sort_order, is_active, is_etc, pictogram FROM activity_type WHERE code = :code",
                         new MapSqlParameterSource("code", code), ITEM)
                 .stream().findFirst();
     }
@@ -83,34 +85,36 @@ public class CategoryRepository {
      *  3) INSERT    : 기타를 뺀 마지막 순서 + 1 자리에 넣는다
      * 한 문장이라 중간에 실패하면 셋 다 취소된다.
      */
-    public String insertParticipation(String name) {
+    public String insertParticipation(String name, String pictogram) {
         return jdbc.queryForObject("""
                 WITH etc_shift AS (
                     UPDATE activity_type SET sort_order = sort_order + 1 WHERE is_etc
                 ), new_id AS (
                     SELECT nextval(pg_get_serial_sequence('activity_type', 'activity_type_id'))::smallint AS id
                 )
-                INSERT INTO activity_type (activity_type_id, code, name, is_etc, sort_order)
+                INSERT INTO activity_type (activity_type_id, code, name, is_etc, sort_order, pictogram)
                 SELECT id, 'custom-' || id, :name, FALSE,
-                       (SELECT coalesce(max(sort_order), 0) + 1 FROM activity_type WHERE NOT is_etc)
+                       (SELECT coalesce(max(sort_order), 0) + 1 FROM activity_type WHERE NOT is_etc), :pictogram
                 FROM new_id
                 RETURNING code
-                """, new MapSqlParameterSource("name", name), String.class);
+                """, new MapSqlParameterSource("name", name).addValue("pictogram", pictogram), String.class);
     }
 
     /**
      * 참여 활동 이름·사용 여부 바꾸기. null로 넘긴 칸은 그대로 둔다 (coalesce = 앞의 값이 null이면 뒤의 값).
      * null일 때도 PostgreSQL이 칸 종류를 알 수 있게 Types를 함께 넘긴다.
      */
-    public void updateParticipation(String code, String name, Boolean active) {
+    public void updateParticipation(String code, String name, Boolean active, String pictogram) {
         jdbc.update("""
                 UPDATE activity_type
                 SET name = coalesce(:name, name),
-                    is_active = coalesce(:active, is_active)
+                    is_active = coalesce(:active, is_active),
+                    pictogram = coalesce(:pictogram, pictogram)
                 WHERE code = :code
                 """, new MapSqlParameterSource()
                 .addValue("code", code)
                 .addValue("name", name, Types.VARCHAR)
-                .addValue("active", active, Types.BOOLEAN));
+                .addValue("active", active, Types.BOOLEAN)
+                .addValue("pictogram", pictogram, Types.VARCHAR));
     }
 }

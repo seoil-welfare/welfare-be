@@ -29,6 +29,8 @@ import kr.seoil.welfare.diary.dto.BehaviorDto;
 import kr.seoil.welfare.diary.dto.DiaryResponse;
 import kr.seoil.welfare.diary.dto.NewsEntryDto;
 import kr.seoil.welfare.diary.dto.SaveDiaryRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,6 +57,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
  * 11. 작성 완료로 저장할 때, 도전적 행동 유형을 골랐는데 세부 항목이 없는 활동이 있으면 400 (QA 03-06)
  *     작성 중 저장은 허용. 상위 '기타'는 세부 목록이 없으니 직접 입력이 비었을 때만 거절
  *  (빈 일지 완료는 서버가 막지 않는다 — 프론트가 확인 창을 띄움, QA 03-02)
+ * 12. 작성 완료로 저장하면(규칙 5에서 되돌린 경우 제외) DiaryCompletedEvent를 보낸다 — 오늘 카드 생성·outdated 처리
 
  */
 @Service
@@ -79,12 +82,21 @@ public class DiaryService {
     private final Catalog catalog;
     private final AuthService authService;
     private final Clock clock;                                      // '오늘' 기준 (한국 시간, 테스트에서는 고정)
+    private final ApplicationEventPublisher events;                 // 규칙 12: 오늘 카드에 알림
 
+    /** 이벤트 없이 쓰는 생성자 (기존 테스트용) */
     public DiaryService(DiaryRepository repo, Catalog catalog, AuthService authService, Clock clock) {
+        this(repo, catalog, authService, clock, event -> { });
+    }
+
+    @Autowired
+    public DiaryService(DiaryRepository repo, Catalog catalog, AuthService authService, Clock clock,
+                        ApplicationEventPublisher events) {
         this.repo = repo;
         this.catalog = catalog;
         this.authService = authService;
         this.clock = clock;
+        this.events = events;
     }
 
     // ==================================================================
@@ -155,6 +167,7 @@ public class DiaryService {
         // 규칙 5: 작성 완료로 바로 저장하면 '등록' 소식
         if ("completed".equals(c.status)) {
             repo.insertHistory(logId, "created", actorId);
+            events.publishEvent(new DiaryCompletedEvent(logId));    // 규칙 12
         }
         return get(String.valueOf(logId));
     }
@@ -200,6 +213,7 @@ public class DiaryService {
         // 규칙 5: 완료로 저장할 때만 소식 이력
         if ("completed".equals(c.status)) {
             repo.insertHistory(logId, wasCompleted ? "updated" : "created", actorId);
+            events.publishEvent(new DiaryCompletedEvent(logId));    // 규칙 12
         }
         return saved;
     }

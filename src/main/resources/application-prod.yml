@@ -14,3 +14,8 @@ server:
         http-only: true
         # 프론트(Vercel)가 /api를 같은 주소로 넘겨 주므로 같은 사이트 쿠키(Lax)로 충분하다
         same-site: lax
+
+card:
+  secret: ${CARD_SECRET}                   # 운영은 기본값 없이 환경 변수 필수 (없으면 서버가 뜨지 않는다)
+  share-base-url: ${CARD_SHARE_BASE_URL:https://welfare-fe.vercel.app}
+  cookie-secure: true
