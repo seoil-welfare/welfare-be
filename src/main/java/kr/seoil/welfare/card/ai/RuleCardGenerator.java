@@ -33,17 +33,29 @@ public class RuleCardGenerator implements CardGenerator {
             }
             String text = guardian.toString();
             items.add(new GeneratedCard.Item(a.time(), word, a.defaultPictogram(), mood,
-                    word + " 활동을 했어요.", text.length() > 500 ? text.substring(0, 500) : text, null));
+                    a.activity() + " 활동을 했어요.", text.length() > 500 ? text.substring(0, 500) : text, null));
         }
         return new GeneratedCard(source.nickname() + "님은 오늘 " + items.size() + "가지 활동을 했어요.", items);
     }
 
-    /** "예술활동" → "예술" (10자 안으로) */
+    /** "예술활동" → "예술" (6자 안으로, 단어가 잘리지 않게 공백은 그대로 둔다) */
     private static String shortWord(String activity) {
-        String w = activity.replace("활동", "").replace(" ", "");
+        String w = activity.replace("활동", "").trim().replaceAll("\\s+", " ");
         if (w.isEmpty()) {
-            w = "활동";
+            return "활동";
         }
-        return w.length() > 6 ? w.substring(0, 6) : w;
+        StringBuilder result = new StringBuilder();
+        for (String token : w.split(" ")) {
+            String candidate = result.isEmpty() ? token : result + " " + token;
+            if (candidate.length() <= 6) {
+                result = new StringBuilder(candidate);
+            } else if (result.isEmpty()) {
+                // 첫 단어부터 6글자를 넘으면 그 단어만 6글자로 자른다
+                return token.substring(0, 6);
+            } else {
+                break;
+            }
+        }
+        return result.isEmpty() ? "활동" : result.toString();
     }
 }
