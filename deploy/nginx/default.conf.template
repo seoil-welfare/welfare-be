@@ -24,7 +24,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${API_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${API_DOMAIN}/privkey.pem;
 
-    client_max_body_size 5m;
+    client_max_body_size 6m;   # 출력 양식 docx 5MB + 요청 여유 (application.yml multipart와 맞춘다)
 
     location /api/ {
         proxy_pass http://app:8080;
