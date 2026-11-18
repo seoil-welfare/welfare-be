@@ -9,6 +9,8 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -39,6 +41,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleDuplicate(DuplicateKeyException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ErrorResponse("이미 같은 날짜의 일지가 있어요.", "DIARY_ALREADY_EXISTS", null));
+    }
+
+    /** 올린 파일이 너무 큼 (application.yml의 multipart 한도) → 400 */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleTooLarge(MaxUploadSizeExceededException e) {
+        return ResponseEntity.badRequest()
+                .body(new ErrorResponse("파일이 너무 커요. 5MB 이하로 올려 주세요.", "INVALID_FORM_FILE", null));
+    }
+
+    /** 파일 업로드 요청 모양이 잘못됨 → 400 */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ErrorResponse> handleMultipart(MultipartException e) {
+        return ResponseEntity.badRequest()
+                .body(new ErrorResponse("파일을 받지 못했어요. 다시 올려 주세요.", "VALIDATION_ERROR", null));
     }
 
     /** 없는 주소로 요청 → 404 */
