@@ -8,6 +8,7 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 
 import kr.seoil.welfare.common.ApiException;
+import kr.seoil.welfare.common.Roles;
 import kr.seoil.welfare.auth.AuthService;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -119,7 +120,7 @@ public class ServiceUserService {
 
     private void requireManager(long actorId) {
         String role = authService.me(actorId).role();
-        if (!"teamLead".equals(role) && !"director".equals(role)) {
+        if (!Roles.isManager(role)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "이용 종결·재개는 팀장·국장만 할 수 있어요.");
         }
     }

@@ -16,6 +16,7 @@ import java.util.Set;
 
 import kr.seoil.welfare.auth.AuthService;
 import kr.seoil.welfare.common.ApiException;
+import kr.seoil.welfare.common.Roles;
 import kr.seoil.welfare.diary.Catalog.BehaviorItem;
 import kr.seoil.welfare.diary.Catalog.Item;
 import kr.seoil.welfare.diary.Catalog.Kind;
@@ -74,9 +75,6 @@ public class DiaryService {
     private static final List<Kind> MULTI = List.of(Kind.PARTICIPATION, Kind.PRE_SUPPORT, Kind.REACTION, Kind.POSITIVE_SUPPORT);
     /** '기타' 직접 입력 최대 글자 수 (DB VARCHAR(200)) */
     private static final int ETC_MAX = 200;
-
-    /** 다른 직원의 작성 중 일지를 지울 수 있는 역할 */
-    private static final Set<String> DIARY_MANAGERS = Set.of("teamLead", "director");
 
     private final DiaryRepository repo;
     private final Catalog catalog;
@@ -233,7 +231,7 @@ public class DiaryService {
             throw ApiException.badRequest("작성 완료된 일지는 삭제할 수 없어요.");
         }
         // 작성자 본인이면 역할 조회 없이 통과, 아니면 팀장·국장만
-        if (log.createdBy() != actorId && !DIARY_MANAGERS.contains(authService.me(actorId).role())) {
+        if (log.createdBy() != actorId && !Roles.isManager(authService.me(actorId).role())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN",
                     "작성 중인 일지는 작성한 사람이나 팀장·국장만 삭제할 수 있어요.");
         }
