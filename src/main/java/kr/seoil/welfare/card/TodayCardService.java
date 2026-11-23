@@ -25,6 +25,7 @@ import kr.seoil.welfare.card.ai.CardSource;
 import kr.seoil.welfare.card.ai.GeneratedCard;
 import kr.seoil.welfare.card.dto.CardDtos;
 import kr.seoil.welfare.common.ApiException;
+import kr.seoil.welfare.common.Roles;
 import kr.seoil.welfare.diary.DiaryService;
 import kr.seoil.welfare.diary.dto.ActivityDto;
 import kr.seoil.welfare.diary.dto.BehaviorDto;
@@ -57,7 +58,6 @@ public class TodayCardService {
     static final int LINK_DAYS = 7;
     static final String PROGRAM = "주간활동";
     static final String DEFAULT_NICKNAME = "이용자";
-    private static final Set<String> MANAGERS = Set.of("teamLead", "director");
 
     private final CardRepository repo;
     private final DiaryService diaries;
@@ -374,7 +374,7 @@ public class TodayCardService {
         String role = auth.me(staffId).role();                      // 사용 중지된 계정이면 403
         boolean allowed = info.createdBy() == staffId
                 || (info.clientStaffId() != null && info.clientStaffId() == staffId)
-                || MANAGERS.contains(role);
+                || Roles.isManager(role);
         if (!allowed) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN",
                     "일지 작성자, 이용자 담당자, 팀장·국장만 카드를 고치거나 보낼 수 있어요.");

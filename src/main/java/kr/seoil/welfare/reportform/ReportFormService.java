@@ -10,6 +10,7 @@ import java.util.zip.ZipInputStream;
 
 import kr.seoil.welfare.auth.AuthService;
 import kr.seoil.welfare.common.ApiException;
+import kr.seoil.welfare.common.Roles;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -25,8 +26,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class ReportFormService {
 
-    /** 양식을 바꿀 수 있는 역할 (참여 활동 관리와 같은 기준) */
-    private static final Set<String> MANAGERS = Set.of("teamLead", "director");
     private static final Set<String> KINDS = Set.of("daily", "monthly");
     /** 파일 최대 크기. 프론트(REPORT_FORM_MAX_BYTES)·application.yml·nginx와 맞춘다 */
     static final int MAX_BYTES = 5 * 1024 * 1024;
@@ -89,7 +88,7 @@ public class ReportFormService {
 
     private void checkManager(long actorId, String message) {
         String role = authService.me(actorId).role();
-        if (!MANAGERS.contains(role)) {
+        if (!Roles.isManager(role)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", message);
         }
     }

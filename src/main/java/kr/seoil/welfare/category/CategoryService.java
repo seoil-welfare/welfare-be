@@ -1,11 +1,11 @@
 package kr.seoil.welfare.category;
 
 import java.util.List;
-import java.util.Set;
 
 import kr.seoil.welfare.auth.AuthService;
 import kr.seoil.welfare.card.CardRules;
 import kr.seoil.welfare.common.ApiException;
+import kr.seoil.welfare.common.Roles;
 import kr.seoil.welfare.diary.Catalog;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -21,9 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class CategoryService {
-
-    /** 참여 활동을 바꿀 수 있는 역할 (계정 추가와 같은 기준) */
-    private static final Set<String> MANAGERS = Set.of("teamLead", "director");
 
     /** activity_type.name 칸 길이 (VARCHAR(30)) */
     private static final int MAX_LABEL = 30;
@@ -113,7 +110,7 @@ public class CategoryService {
     /** 팀장·국장이 아니면 403 (사용 중지된 계정이면 me()에서 403) */
     private void checkManager(long actorId) {
         String role = authService.me(actorId).role();
-        if (!MANAGERS.contains(role)) {
+        if (!Roles.isManager(role)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "참여 활동은 팀장·국장만 바꿀 수 있어요.");
         }
     }

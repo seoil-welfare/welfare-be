@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 import kr.seoil.welfare.auth.dto.ChangePasswordRequest;
 import kr.seoil.welfare.auth.dto.LoginRequest;
 import kr.seoil.welfare.common.ApiException;
+import kr.seoil.welfare.common.Roles;
 import kr.seoil.welfare.staff.ChangeRoleRequest;
 import kr.seoil.welfare.staff.CreateStaffRequest;
 import kr.seoil.welfare.staff.CreatedStaffResponse;
@@ -41,8 +42,6 @@ public class AuthService {
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");         // '오늘'은 한국 날짜 기준
     private static final LocalDate MIN_BIRTH_DATE = LocalDate.of(1900, 1, 1);   // 잘못 친 연도(0199 등) 막기
 
-    /** 계정 추가를 할 수 있는 역할 (지금 프론트가 팀장·국장에게만 메뉴를 보여 주는 것과 같게) */
-    private static final Set<String> STAFF_MANAGERS = Set.of("teamLead", "director");
     /** 역할 변경으로 줄 수 있는 역할 (국장은 이양으로만) */
     private static final Set<String> CHANGEABLE_ROLES = Set.of("staff", "teamLead");
 
@@ -82,7 +81,7 @@ public class AuthService {
     @Transactional
     public CreatedStaffResponse createStaff(long actorId, CreateStaffRequest body) {
         String actorRole = me(actorId).role();                         // 사용 중지된 계정이면 여기서 403
-        if (!STAFF_MANAGERS.contains(actorRole)) {
+        if (!Roles.isManager(actorRole)) {
             throw forbidden("계정 추가는 팀장·국장만 할 수 있어요.");
         }
         if (body == null) {
@@ -119,7 +118,7 @@ public class AuthService {
     @Transactional
     public StaffDto setStaffActive(long actorId, String targetId, boolean active) {
         String actorRole = me(actorId).role();                         // 요청한 사람이 사용 중지 상태면 여기서 403
-        if (!STAFF_MANAGERS.contains(actorRole)) {
+        if (!Roles.isManager(actorRole)) {
             throw forbidden("계정 사용 중지는 팀장·국장만 할 수 있어요.");
         }
         long staffId = parseStaffId(targetId);                         // 숫자가 아니면 그런 직원은 없음 → 404
@@ -148,7 +147,7 @@ public class AuthService {
     @Transactional
     public CreatedStaffResponse resetPassword(long actorId, String targetId) {
         String actorRole = me(actorId).role();                         // 요청한 사람이 사용 중지 상태면 여기서 403
-        if (!STAFF_MANAGERS.contains(actorRole)) {
+        if (!Roles.isManager(actorRole)) {
             throw forbidden("임시 비밀번호 발급은 팀장·국장만 할 수 있어요.");
         }
         long staffId = parseStaffId(targetId);
@@ -182,7 +181,7 @@ public class AuthService {
     @Transactional
     public StaffDto changeRole(long actorId, String targetId, ChangeRoleRequest body) {
         String actorRole = me(actorId).role();                         // 요청한 사람이 사용 중지 상태면 여기서 403
-        if (!STAFF_MANAGERS.contains(actorRole)) {
+        if (!Roles.isManager(actorRole)) {
             throw forbidden("역할 변경은 팀장·국장만 할 수 있어요.");
         }
         String role = body == null ? "" : trimToEmpty(body.role());
