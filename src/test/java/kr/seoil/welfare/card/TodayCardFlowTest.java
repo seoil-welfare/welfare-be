@@ -128,7 +128,7 @@ class TodayCardFlowTest {
     }
 
     SaveDiaryRequest diary(String status, String notes, String updatedAt, ActivityDto... activities) {
-        return new SaveDiaryRequest("1", "2026-11-07", status, "맑음", "양호", null, List.of(activities), notes, updatedAt);
+        return new SaveDiaryRequest("1", "2026-11-07", status, "맑음", null, "양호", null, List.of(activities), notes, updatedAt);
     }
 
     /** 일지를 작성 완료로 만들고 카드 생성까지 끝낸다 → 일지 번호 */

@@ -24,7 +24,7 @@ public class DiaryRepository {
 
     /** daily_log 한 줄 */
     public record LogRow(long id, long clientId, LocalDate date, String status,
-                         short weatherId, short conditionId, String conditionEtc, String remark,
+                         short weatherId, String temperature, short conditionId, String conditionEtc, String remark,
                          long createdBy, Long updatedBy, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
     }
 
@@ -50,7 +50,7 @@ public class DiaryRepository {
                              long clientId, LocalDate date) {
     }
 
-    private static final String LOG_COLUMNS = "log_id, client_id, log_date, status, weather_id, condition_id,"
+    private static final String LOG_COLUMNS = "log_id, client_id, log_date, status, weather_id, temperature, condition_id,"
             + " condition_etc, remark, created_by, updated_by, created_at, updated_at";
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -142,37 +142,40 @@ public class DiaryRepository {
     // ==================================================================
 
     /** 새 일지 한 줄 추가 → 발급된 log_id 반환 */
-    public long insertLog(long clientId, LocalDate date, String status, short weatherId, short conditionId,
+    public long insertLog(long clientId, LocalDate date, String status, short weatherId, String temperature, short conditionId,
                           String conditionEtc, String remark, long actorId) {
         MapSqlParameterSource p = new MapSqlParameterSource()
                 .addValue("clientId", clientId)
                 .addValue("date", date)
                 .addValue("status", status)
                 .addValue("weatherId", weatherId)
+                .addValue("temperature", temperature, Types.VARCHAR)
                 .addValue("conditionId", conditionId)
                 .addValue("conditionEtc", conditionEtc, Types.VARCHAR)   // null일 수 있어서 타입을 알려 줌
                 .addValue("remark", remark, Types.VARCHAR)
                 .addValue("actor", actorId);
         Long id = jdbc.queryForObject("INSERT INTO daily_log"
-                + " (client_id, log_date, status, weather_id, condition_id, condition_etc, remark, created_by)"
-                + " VALUES (:clientId, :date, :status, :weatherId, :conditionId, :conditionEtc, :remark, :actor)"
+                + " (client_id, log_date, status, weather_id, temperature, condition_id, condition_etc, remark, created_by)"
+                + " VALUES (:clientId, :date, :status, :weatherId, :temperature, :conditionId, :conditionEtc, :remark, :actor)"
                 + " RETURNING log_id", p, Long.class);                   // RETURNING: 새 번호를 바로 돌려받기
         return id;
     }
 
     /** 기존 일지 내용 수정. markEditor가 true면 수정자(updated_by)도 기록 */
-    public void updateLog(long logId, String status, short weatherId, short conditionId,
+    public void updateLog(long logId, String status, short weatherId, String temperature, short conditionId,
                           String conditionEtc, String remark, long actorId, boolean markEditor) {
         MapSqlParameterSource p = new MapSqlParameterSource()
                 .addValue("id", logId)
                 .addValue("status", status)
                 .addValue("weatherId", weatherId)
+                .addValue("temperature", temperature, Types.VARCHAR)
                 .addValue("conditionId", conditionId)
                 .addValue("conditionEtc", conditionEtc, Types.VARCHAR)
                 .addValue("remark", remark, Types.VARCHAR)
                 .addValue("actor", actorId);
         String editor = markEditor ? ", updated_by = :actor" : "";
-        jdbc.update("UPDATE daily_log SET status = :status, weather_id = :weatherId, condition_id = :conditionId,"
+        jdbc.update("UPDATE daily_log SET status = :status, weather_id = :weatherId, temperature = :temperature,"
+                + " condition_id = :conditionId,"
                 + " condition_etc = :conditionEtc, remark = :remark, updated_at = now()" + editor
                 + " WHERE log_id = :id", p);
     }
@@ -229,7 +232,7 @@ public class DiaryRepository {
         long updatedBy = rs.getLong("updated_by");
         Long updatedByOrNull = rs.wasNull() ? null : updatedBy;     // NULL이면 null로
         return new LogRow(rs.getLong("log_id"), rs.getLong("client_id"), rs.getObject("log_date", LocalDate.class),
-                rs.getString("status"), rs.getShort("weather_id"), rs.getShort("condition_id"),
+                rs.getString("status"), rs.getShort("weather_id"), rs.getString("temperature"), rs.getShort("condition_id"),
                 rs.getString("condition_etc"), rs.getString("remark"), rs.getLong("created_by"), updatedByOrNull,
                 rs.getObject("created_at", OffsetDateTime.class), rs.getObject("updated_at", OffsetDateTime.class));
     }

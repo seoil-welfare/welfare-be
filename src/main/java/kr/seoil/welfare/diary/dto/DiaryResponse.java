@@ -13,6 +13,7 @@ public record DiaryResponse(
         String lastEditorId,            // 작성 완료 후 마지막으로 수정한 직원 (없으면 응답에서 빠짐)
         String status,                  // draft | completed
         String weather,
+        String temperature,             // 온도 구간 코드. 고르지 않았으면 응답에서 빠짐
         String condition,
         String conditionOther,
         List<ActivityDto> activities,

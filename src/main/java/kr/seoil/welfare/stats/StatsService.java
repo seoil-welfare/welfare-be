@@ -1,5 +1,7 @@
 package kr.seoil.welfare.stats;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -11,6 +13,7 @@ import kr.seoil.welfare.common.ApiException;
 import kr.seoil.welfare.diary.Catalog;
 import kr.seoil.welfare.diary.Catalog.Item;
 import kr.seoil.welfare.diary.Catalog.Kind;
+import kr.seoil.welfare.diary.TemperatureBand;
 import kr.seoil.welfare.stats.StatsPeriod.Range;
 import kr.seoil.welfare.stats.StatsRepository.BehaviorRow;
 import kr.seoil.welfare.stats.StatsSummaryResponse.Activities;
@@ -23,6 +26,9 @@ import kr.seoil.welfare.stats.StatsSummaryResponse.BehaviorRecord;
 import kr.seoil.welfare.stats.StatsSummaryResponse.RecordBehavior;
 import kr.seoil.welfare.stats.StatsSummaryResponse.TrendPoint;
 import kr.seoil.welfare.stats.StatsSummaryResponse.TypeSummary;
+import kr.seoil.welfare.stats.WeatherStatsResponse.Excluded;
+import kr.seoil.welfare.stats.WeatherStatsResponse.TemperatureCount;
+import kr.seoil.welfare.stats.WeatherStatsResponse.WeatherCount;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -112,6 +118,55 @@ public class StatsService {
                 activityCounts(Kind.POSITIVE_SUPPORT, clientId, range),
                 sorted(Kind.CONDITION, repo.conditionCounts(clientId, range)),
                 activities(clientId, range, participation));
+    }
+
+    /** 날씨별 통계의 기간 검사: 둘 다 필요하고, 시작일이 종료일보다 늦으면 안 된다 */
+    public Range toRange(String from, String to) {
+        if (from == null || from.isBlank() || to == null || to.isBlank()) {
+            throw ApiException.badRequest("from과 to(YYYY-MM-DD)가 필요해요.");
+        }
+        LocalDate start;
+        LocalDate end;
+        try {
+            start = LocalDate.parse(from.trim());
+            end = LocalDate.parse(to.trim());
+        } catch (DateTimeParseException e) {
+            throw ApiException.badRequest("날짜는 YYYY-MM-DD 형식이어야 해요.");
+        }
+        if (start.isAfter(end)) {
+            throw ApiException.badRequest("시작일이 종료일보다 늦어요.");
+        }
+        return new Range(start, end, start + " ~ " + end);
+    }
+
+    /**
+     * GET /api/stats/weather — 날씨별·온도 구간별 도전적 행동 건수와 그 날씨(구간)였던 날 수.
+     * 온도가 없는 일지(온도 칸이 생기기 전 기록 등)는 온도별 집계에서 빼고, 뺀 날 수·건수를 따로 알려 준다.
+     * 날씨는 일지마다 꼭 있어서 날씨별 집계에서는 빠지는 일지가 없다.
+     */
+    @Transactional(readOnly = true)
+    public WeatherStatsResponse weather(long clientId, Range range) {
+        Map<Short, Integer> weatherDays = repo.weatherDays(clientId, range);
+        Map<Short, Integer> weatherBehavior = repo.behaviorByWeather(clientId, range);
+        List<WeatherCount> weather = new ArrayList<>();
+        for (Item item : catalog.items(Kind.WEATHER)) {
+            int days = weatherDays.getOrDefault(item.id(), 0);
+            int behavior = weatherBehavior.getOrDefault(item.id(), 0);
+            weather.add(new WeatherCount(item.code(), catalog.label(Kind.WEATHER, item), behavior, days));
+        }
+
+        Map<String, Integer> temperatureDays = repo.temperatureDays(clientId, range);         // null 키 = 온도 없음
+        Map<String, Integer> temperatureBehavior = repo.behaviorByTemperature(clientId, range);
+        List<TemperatureCount> temperature = new ArrayList<>();
+        for (TemperatureBand band : TemperatureBand.values()) {
+            temperature.add(new TemperatureCount(band.name(), band.label(), band.range(),
+                    temperatureBehavior.getOrDefault(band.name(), 0), temperatureDays.getOrDefault(band.name(), 0)));
+        }
+        Excluded excluded = new Excluded(temperatureDays.getOrDefault(null, 0), temperatureBehavior.getOrDefault(null, 0));
+
+        int completed = weatherDays.values().stream().mapToInt(Integer::intValue).sum();
+        return new WeatherStatsResponse(range.start().toString(), range.end().toString(), completed,
+                weather, temperature, excluded);
     }
 
     /** 참여 활동 상세 (FR-53, 55, 56) */

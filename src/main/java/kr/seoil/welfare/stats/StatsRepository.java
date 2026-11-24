@@ -179,6 +179,44 @@ public class StatsRepository {
         return result;
     }
 
+    /** 날씨별 작성 완료 일지 수 { 날씨 번호: 일지 수 }. 이용자·날짜당 일지가 1건이라 일지 수 = 날 수 */
+    public Map<Short, Integer> weatherDays(long clientId, Range range) {
+        Map<Short, Integer> result = new HashMap<>();
+        jdbc.query("SELECT l.weather_id AS item_id, count(*) AS cnt FROM daily_log l"
+                        + " WHERE" + LOG_FILTER + " GROUP BY l.weather_id",
+                params(clientId, range),
+                rs -> { result.put(rs.getShort("item_id"), rs.getInt("cnt")); });
+        return result;
+    }
+
+    /** 날씨별 도전적 행동 건수 { 날씨 번호: 건수 } */
+    public Map<Short, Integer> behaviorByWeather(long clientId, Range range) {
+        Map<Short, Integer> result = new HashMap<>();
+        jdbc.query("SELECT l.weather_id AS item_id, count(*) AS cnt" + BEHAVIOR_FROM + " GROUP BY l.weather_id",
+                params(clientId, range),
+                rs -> { result.put(rs.getShort("item_id"), rs.getInt("cnt")); });
+        return result;
+    }
+
+    /** 온도 구간별 작성 완료 일지 수 { COLD: 3, ..., null: 온도 없는 일지 수 } */
+    public Map<String, Integer> temperatureDays(long clientId, Range range) {
+        Map<String, Integer> result = new HashMap<>();
+        jdbc.query("SELECT l.temperature, count(*) AS cnt FROM daily_log l"
+                        + " WHERE" + LOG_FILTER + " GROUP BY l.temperature",
+                params(clientId, range),
+                rs -> { result.put(rs.getString("temperature"), rs.getInt("cnt")); });
+        return result;
+    }
+
+    /** 온도 구간별 도전적 행동 건수 { COLD: 2, ..., null: 온도 없는 일지의 건수 } */
+    public Map<String, Integer> behaviorByTemperature(long clientId, Range range) {
+        Map<String, Integer> result = new HashMap<>();
+        jdbc.query("SELECT l.temperature, count(*) AS cnt" + BEHAVIOR_FROM + " GROUP BY l.temperature",
+                params(clientId, range),
+                rs -> { result.put(rs.getString("temperature"), rs.getInt("cnt")); });
+        return result;
+    }
+
     /** 일지 기준 컨디션별 건수 { 컨디션 번호: 건수 } */
     public Map<Short, Integer> conditionCounts(long clientId, Range range) {
         Map<Short, Integer> result = new HashMap<>();

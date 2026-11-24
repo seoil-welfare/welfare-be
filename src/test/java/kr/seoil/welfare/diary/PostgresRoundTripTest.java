@@ -56,7 +56,7 @@ class PostgresRoundTripTest {
     SaveDiaryRequest request(String start, String end, String notes, String version) {
         ActivityDto activity = new ActivityDto(null, start, end, List.of("예술활동"), null, "활동", List.of("선택지 제공"), null,
                 List.of("적극적 참여", "기타"), "집중", List.of(), null, true, List.of(new BehaviorDto("selfHarm", List.of("sh-1"), null)));
-        return new SaveDiaryRequest("1", "2026-11-07", "completed", "맑음", "양호", null, List.of(activity), notes, version);
+        return new SaveDiaryRequest("1", "2026-11-07", "completed", "맑음", null, "양호", null, List.of(activity), notes, version);
     }
     @ParameterizedTest @CsvSource({"00:00,00:01", "00:00,24:00", "09:00,10:00", "17:00,18:00", "23:59,24:00",
             "12:15,13:45", "10:00,11:00", "01:01,01:59", "18:30,21:17", "22:45,23:55"})
