@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.SessionAttribute;
  *  GET /api/stats/summary?userId=1&unit=week&year=2026&month=10&week=2
  *  GET /api/stats/summary?userId=1&unit=quarter&year=2026&quarter=3
  *  GET /api/stats/summary?userId=1&unit=year&year=2026
+ *  GET /api/stats/weather?userId=1&from=2026-11-01&to=2026-11-30   (날씨별·온도 구간별 도전적 행동)
  *
  * 프론트 통계 화면 4개(useStatsSummary)가 이 응답 하나로 그린다. 일지 수백 건 대신 숫자만 받는다.
  */
@@ -38,15 +39,28 @@ public class StatsController {
             @RequestParam(required = false) Integer quarter,
             @RequestParam(required = false) Integer week) {
         SessionStaff.require(staffId);                           // 로그인 안 했으면 401
+        return statsService.summary(clientId(userId), statsService.toPeriod(unit, year, month, quarter, week));
+    }
+
+    /** 날씨별·온도 구간별 도전적 행동. from~to는 둘 다 포함 */
+    @GetMapping("/weather")
+    public WeatherStatsResponse weather(
+            @SessionAttribute(name = SessionStaff.KEY, required = false) Long staffId,
+            @RequestParam(required = false) String userId,       // 이용자 번호 (필수)
+            @RequestParam(required = false) String from,         // 시작일 YYYY-MM-DD
+            @RequestParam(required = false) String to) {         // 종료일 YYYY-MM-DD
+        SessionStaff.require(staffId);
+        return statsService.weather(clientId(userId), statsService.toRange(from, to));
+    }
+
+    private static long clientId(String userId) {
         if (userId == null || userId.isBlank()) {
             throw ApiException.badRequest("userId가 필요해요.");
         }
-        long clientId;
         try {
-            clientId = Long.parseLong(userId.trim());
+            return Long.parseLong(userId.trim());
         } catch (NumberFormatException e) {
             throw ApiException.badRequest("이용자 번호가 올바르지 않아요.");
         }
-        return statsService.summary(clientId, statsService.toPeriod(unit, year, month, quarter, week));
     }
 }
