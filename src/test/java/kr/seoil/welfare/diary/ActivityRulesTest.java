@@ -38,7 +38,7 @@ class ActivityRulesTest {
         return new ActivityDto(null, start, end, List.of(), null, "활동", List.of(), null, reaction, "내용", List.of(), null, false, List.of());
     }
     SaveDiaryRequest request(ActivityDto... activities) {
-        return new SaveDiaryRequest("1", "2026-11-07", "completed", "맑음", "양호", null, List.of(activities), "", null);
+        return new SaveDiaryRequest("1", "2026-11-07", "completed", "맑음", null, "양호", null, List.of(activities), "", null);
     }
     void valid(ActivityDto... activities) {
         // 검사 다음 단계의 존재하지 않는 이용자 오류까지 갔는지 확인한다. DB 저장은 없어야 한다.

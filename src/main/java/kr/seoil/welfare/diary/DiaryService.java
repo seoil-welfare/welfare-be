@@ -158,7 +158,7 @@ public class DiaryService {
         }
 
         // 규칙 3: 작성자 = 지금 로그인한 직원
-        long logId = repo.insertLog(c.clientId, c.date, c.status, c.weather.id(), c.condition.id(),
+        long logId = repo.insertLog(c.clientId, c.date, c.status, c.weather.id(), c.temperature, c.condition.id(),
                 c.conditionEtc, c.remark, actorId);
         insertActivities(logId, c.activities);
 
@@ -195,7 +195,7 @@ public class DiaryService {
         }
 
         // 완료된 일지를 다시 저장 = 수정 → 수정자 기록
-        repo.updateLog(logId, c.status, c.weather.id(), c.condition.id(), c.conditionEtc, c.remark,
+        repo.updateLog(logId, c.status, c.weather.id(), c.temperature, c.condition.id(), c.conditionEtc, c.remark,
                 actorId, wasCompleted);
 
         // 규칙 4: 활동 통째로 교체
@@ -280,6 +280,7 @@ public class DiaryService {
     private static boolean sameContent(DiaryResponse a, DiaryResponse b) {
         return a.status().equals(b.status())
                 && a.weather().equals(b.weather())
+                && Objects.equals(a.temperature(), b.temperature())
                 && a.condition().equals(b.condition())
                 && Objects.equals(a.conditionOther(), b.conditionOther())
                 && a.notes().equals(b.notes())
@@ -299,7 +300,7 @@ public class DiaryService {
     // ==================================================================
 
     /** 검사를 통과한 저장용 값 */
-    private record Checked(long clientId, LocalDate date, String status, Item weather, Item condition,
+    private record Checked(long clientId, LocalDate date, String status, Item weather, String temperature, Item condition,
                            String conditionEtc, String remark, List<CheckedActivity> activities) {
     }
 
@@ -328,6 +329,7 @@ public class DiaryService {
             throw ApiException.badRequest("컨디션을 선택해 주세요.");
         }
         Item weather = catalog.byLabel(Kind.WEATHER, req.weather());
+        TemperatureBand temperature = TemperatureBand.parse(req.temperature());   // 비어 있으면 null
         Item condition = catalog.byLabel(Kind.CONDITION, req.condition());
         // '기타' 컨디션일 때만 직접 입력을 저장
         String conditionEtc = condition.etc() ? etcText(req.conditionOther()) : null;
@@ -351,7 +353,8 @@ public class DiaryService {
             throw ApiException.badRequest("오늘 이후 날짜에는 일지를 쓸 수 없어요.");
         }
         return new Checked(parseId(req.userId(), "이용자"), date, req.status(),
-                weather, condition, conditionEtc, trimToNull(req.notes()), activities);
+                weather, temperature == null ? null : temperature.name(), condition, conditionEtc,
+                trimToNull(req.notes()), activities);
     }
 
     private CheckedActivity checkActivity(ActivityDto a, boolean completed, List<String> behaviorProblems) {
@@ -540,6 +543,7 @@ public class DiaryService {
                     log.updatedBy() == null ? null : String.valueOf(log.updatedBy()),
                     log.status(),
                     catalog.label(Kind.WEATHER, weather),
+                    log.temperature(),
                     catalog.label(Kind.CONDITION, condition),
                     log.conditionEtc(),
                     activities,

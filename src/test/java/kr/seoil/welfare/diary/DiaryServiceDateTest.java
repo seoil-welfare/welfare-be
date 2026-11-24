@@ -45,7 +45,7 @@ class DiaryServiceDateTest {
 
     /** 날짜만 다르게 한 작성 중 일지 저장 요청 (가상 이용자 1번) */
     private static SaveDiaryRequest draftOn(LocalDate date) {
-        return new SaveDiaryRequest("1", date.toString(), "draft", "맑음", "양호", null,
+        return new SaveDiaryRequest("1", date.toString(), "draft", "맑음", null, "양호", null,
                 List.of(), null, null);
     }
 
@@ -57,7 +57,7 @@ class DiaryServiceDateTest {
 
         assertEquals(400, e.getStatus().value());
         assertEquals("오늘 이후 날짜에는 일지를 쓸 수 없어요.", e.getMessage());
-        verify(repo, never()).insertLog(anyLong(), any(), any(), anyShort(), anyShort(),
+        verify(repo, never()).insertLog(anyLong(), any(), any(), anyShort(), any(), anyShort(),
                 any(), any(), anyLong());
     }
 

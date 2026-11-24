@@ -63,7 +63,7 @@ class DiaryServiceSaveValidationTest {
     }
 
     private static SaveDiaryRequest request(String date, String status, ActivityDto... activities) {
-        return new SaveDiaryRequest("1", date, status, "맑음", "양호", null, List.of(activities), "", null);
+        return new SaveDiaryRequest("1", date, status, "맑음", null, "양호", null, List.of(activities), "", null);
     }
 
     private void assertBadRequest(SaveDiaryRequest req, String message) {
@@ -71,7 +71,7 @@ class DiaryServiceSaveValidationTest {
             assertThat(e.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
             assertThat(e.getMessage()).isEqualTo(message);
         });
-        verify(repo, never()).insertLog(anyLong(), any(), any(), anyShort(), anyShort(), any(), any(), anyLong());
+        verify(repo, never()).insertLog(anyLong(), any(), any(), anyShort(), any(), anyShort(), any(), any(), anyLong());
     }
 
     private static short anyShort() {
